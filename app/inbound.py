@@ -104,3 +104,34 @@ def reply_text(patient, received, pend, notes) -> str:
     else:
         lines.append(f"\nThat's everything we need for now. We'll send it to {patient.get('insurer') or 'your insurer'} and keep you posted.")
     return "\n".join(lines)
+
+
+META_MIME = {"image": "image/jpeg", "document": "application/pdf"}
+
+
+def handle_meta(payload: dict):
+    """Meta WhatsApp Cloud API webhook: incoming messages and delivery receipts."""
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            v = change.get("value", {})
+            for st in v.get("statuses", []):
+                status = {"delivered": "delivered", "read": "read", "failed": "failed"}.get(st.get("status"))
+                if status:
+                    err = (st.get("errors") or [{}])[0]
+                    db.ex("UPDATE messages SET status=?, error=COALESCE(?, error) WHERE provider_ref=?",
+                          (status, err.get("title") or err.get("message"), st.get("id")))
+            for m in v.get("messages", []):
+                t = m.get("type")
+                form = {"From": "+" + m.get("from", ""), "MessageSid": m.get("id", ""), "NumMedia": "0", "Body": ""}
+                if t == "text":
+                    form["Body"] = m.get("text", {}).get("body", "")
+                elif t in ("image", "document"):
+                    media = m.get(t, {})
+                    form.update({"NumMedia": "1", "MediaUrl0": "meta:" + media.get("id", ""),
+                                 "MediaContentType0": (media.get("mime_type") or META_MIME[t]).split(";")[0],
+                                 "Body": media.get("caption", "")})
+                elif t == "button":
+                    form["Body"] = m.get("button", {}).get("text", "")
+                else:
+                    form["Body"] = f"[{t} message]"
+                handle_whatsapp(form)

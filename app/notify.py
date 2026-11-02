@@ -15,12 +15,25 @@ def _wa_number(phone: str) -> str:
     return p
 
 
+GRAPH = "https://graph.facebook.com/v21.0"
+
+
 def whatsapp_provider() -> str:
+    forced = os.getenv("WHATSAPP_PROVIDER", "").strip().lower()
+    if forced in ("meta", "twilio", "simulated"):
+        return forced
+    if os.getenv("META_WA_TOKEN") and os.getenv("META_WA_PHONE_NUMBER_ID"):
+        return "meta"      # preferred: free Cloud API, sends our own text
     if os.getenv("TWILIO_ACCOUNT_SID") and os.getenv("TWILIO_AUTH_TOKEN"):
         return "twilio"
-    if os.getenv("META_WA_TOKEN") and os.getenv("META_WA_PHONE_NUMBER_ID"):
-        return "meta"
     return "simulated"
+
+
+META_HINTS = {
+    131047: "Outside WhatsApp's 24-hour window: the patient must message the business number first (e.g. 'hi').",
+    131030: "Recipient not on the test number's allowed list: add it in Meta > WhatsApp > API Setup > To.",
+    190: "Meta access token expired or invalid: generate a new one and update META_WA_TOKEN.",
+}
 
 
 def send_whatsapp(phone: str, body: str) -> tuple[str, str, str, str]:
@@ -47,12 +60,18 @@ def _send_wa(to: str, body: str) -> tuple[str, str, str]:
                 return "failed", "", f"Twilio {r.status_code}: {r.text[:300]}"
             return "sent", r.json().get("sid", ""), ""
         if prov == "meta":
-            r = httpx.post(f"https://graph.facebook.com/v21.0/{os.environ['META_WA_PHONE_NUMBER_ID']}/messages",
+            r = httpx.post(f"{GRAPH}/{os.environ['META_WA_PHONE_NUMBER_ID']}/messages",
                            headers={"Authorization": f"Bearer {os.environ['META_WA_TOKEN']}"}, timeout=20,
                            json={"messaging_product": "whatsapp", "to": to.lstrip("+"),
-                                 "type": "text", "text": {"body": body}})
+                                 "type": "text", "text": {"body": body, "preview_url": False}})
             if r.status_code >= 300:
-                return "failed", "", f"Meta {r.status_code}: {r.text[:300]}"
+                try:
+                    err = r.json().get("error", {})
+                    code = err.get("code")
+                    hint = META_HINTS.get(code) or META_HINTS.get(err.get("error_subcode"), "")
+                    return "failed", "", f"Meta {code}: {err.get('message', '')} {hint}".strip()
+                except Exception:
+                    return "failed", "", f"Meta {r.status_code}: {r.text[:300]}"
             return "sent", (r.json().get("messages") or [{}])[0].get("id", ""), ""
         return "simulated", "", "WhatsApp not configured (see .env)"
     except Exception as e:
@@ -89,6 +108,14 @@ def email_configured() -> bool:
 
 
 def download_twilio_media(url: str) -> bytes:
+    """Downloads a patient's WhatsApp attachment. 'meta:<media id>' for Meta, a URL for Twilio."""
+    if url.startswith("meta:"):
+        auth = {"Authorization": f"Bearer {os.environ['META_WA_TOKEN']}"}
+        info = httpx.get(f"{GRAPH}/{url[5:]}", headers=auth, timeout=20)
+        info.raise_for_status()
+        r = httpx.get(info.json()["url"], headers=auth, follow_redirects=True, timeout=60)
+        r.raise_for_status()
+        return r.content
     sid, tok = os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN")
     r = httpx.get(url, auth=(sid, tok) if sid else None, follow_redirects=True, timeout=30)
     r.raise_for_status()
@@ -102,4 +129,13 @@ def twilio_signature_ok(url: str, params: dict, signature: str) -> bool:
         return True
     payload = url + "".join(k + params[k] for k in sorted(params))
     expected = base64.b64encode(hmac.new(tok.encode(), payload.encode(), hashlib.sha1).digest()).decode()
+    return hmac.compare_digest(expected, signature or "")
+
+
+def meta_signature_ok(raw: bytes, signature: str) -> bool:
+    import hashlib, hmac
+    secret = os.getenv("META_APP_SECRET")
+    if not secret:
+        return True
+    expected = "sha256=" + hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature or "")

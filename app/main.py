@@ -19,9 +19,9 @@ from starlette.middleware.sessions import SessionMiddleware  # noqa: E402
 
 from . import db  # noqa: E402
 from .importer import import_bundle  # noqa: E402
-from .inbound import handle_whatsapp  # noqa: E402
+from .inbound import handle_meta, handle_whatsapp  # noqa: E402
 from .llm import engine_name  # noqa: E402
-from .notify import email_configured, send_email, send_whatsapp, twilio_signature_ok, whatsapp_provider  # noqa: E402
+from .notify import email_configured, meta_signature_ok, send_email, send_whatsapp, twilio_signature_ok, whatsapp_provider  # noqa: E402
 from .pipeline import (OPEN_STATUSES, add_document, notify_for_query, pending_for_query, point_rows,  # noqa: E402
                        process_query, refresh_progress, run_due_reminders, send_reminder)
 from .taxonomy import DOC_TYPES, PATIENT_SOURCED, label  # noqa: E402
@@ -517,6 +517,8 @@ def settings_page(request: Request):
         "engine": engine_name(), "wa": whatsapp_provider(), "email_on": email_configured(),
         "wa_override": os.getenv("WHATSAPP_OVERRIDE_TO"), "email_override": os.getenv("EMAIL_OVERRIDE_TO"),
         "base": base, "webhook": f"{base or 'https://<your-public-url>'}/webhooks/twilio/whatsapp",
+        "meta_webhook": f"{base or 'https://<your-public-url>'}/webhooks/meta",
+        "meta_verify_set": bool(os.getenv("META_VERIFY_TOKEN")), "meta_secret_set": bool(os.getenv("META_APP_SECRET")),
         "users": db.q("SELECT username, role, display_name, patient_id FROM users ORDER BY role, username")})
 
 
@@ -562,6 +564,25 @@ async def twilio_status(request: Request):
         db.ex("UPDATE messages SET status=?, error=COALESCE(?, error) WHERE provider_ref=?",
               ("failed" if st == "undelivered" else st, params.get("ErrorCode"), params.get("MessageSid")))
     return Response(status_code=204)
+
+
+@app.get("/webhooks/meta")
+def meta_verify(request: Request):
+    p = request.query_params
+    tok = os.getenv("META_VERIFY_TOKEN")
+    if p.get("hub.mode") == "subscribe" and tok and secrets.compare_digest(p.get("hub.verify_token", ""), tok):
+        return Response(p.get("hub.challenge", ""), media_type="text/plain")
+    raise HTTPException(403, "verification failed")
+
+
+@app.post("/webhooks/meta")
+async def meta_inbound(request: Request, bg: BackgroundTasks):
+    raw = await request.body()
+    if not meta_signature_ok(raw, request.headers.get("x-hub-signature-256", "")):
+        db.audit("meta", "WEBHOOK_BAD_SIGNATURE", "/webhooks/meta")
+        raise HTTPException(403, "bad signature")
+    bg.add_task(handle_meta, json.loads(raw or b"{}"))
+    return Response(status_code=200)
 
 
 # ---- JSON API -------------------------------------------------------------------

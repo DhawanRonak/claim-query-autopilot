@@ -157,4 +157,30 @@ with TestClient(main.app) as c:
     for path in ("/", "/?view=attention", "/settings", "/import", "/audit", "/patients/CF-P011", "/patients/new"):
         check(c.get(path).status_code == 200, f"admin page {path} renders")
 
+print("Meta WhatsApp Cloud API")
+import hashlib, hmac, json as _json
+os.environ.update({"META_VERIFY_TOKEN": "vt-123", "META_APP_SECRET": "sec"})
+media["meta:MID1"] = make_pdf("Aadhaar card - Government of India - Ravi Kumar Sharma")
+sent.clear()
+with TestClient(main.app) as c:
+    r = c.get("/webhooks/meta", params={"hub.mode": "subscribe", "hub.verify_token": "vt-123", "hub.challenge": "42"})
+    check(r.status_code == 200 and r.text == "42", "Meta webhook verification handshake")
+    check(c.get("/webhooks/meta", params={"hub.mode": "subscribe", "hub.verify_token": "bad", "hub.challenge": "1"}).status_code == 403,
+          "wrong verify token rejected")
+    payload = {"entry": [{"changes": [{"value": {"messages": [{"from": "919999900001", "id": "wamid.X1", "type": "document",
+               "document": {"id": "MID1", "mime_type": "application/pdf", "filename": "a.pdf"}}]}}]}]}
+    raw = _json.dumps(payload).encode()
+    check(c.post("/webhooks/meta", content=raw, headers={"x-hub-signature-256": "sha256=bad"}).status_code == 403,
+          "Meta webhook with bad signature rejected")
+    sig = "sha256=" + hmac.new(b"sec", raw, hashlib.sha256).hexdigest()
+    check(c.post("/webhooks/meta", content=raw, headers={"x-hub-signature-256": sig}).status_code == 200, "signed Meta webhook accepted")
+    check(db.q1("SELECT * FROM documents WHERE patient_id='CF-P001' AND doc_type='kyc_aadhaar' AND source='whatsapp'") is not None,
+          "Meta document downloaded and classified into the locker")
+    check(sent and "received" in sent[-1], "auto-reply sent after Meta message")
+    db.ex("UPDATE messages SET provider_ref='wamid.OUT1' WHERE id=(SELECT max(id) FROM messages WHERE direction='out')")
+    st = {"entry": [{"changes": [{"value": {"statuses": [{"id": "wamid.OUT1", "status": "read"}]}}]}]}
+    raw = _json.dumps(st).encode()
+    c.post("/webhooks/meta", content=raw, headers={"x-hub-signature-256": "sha256=" + hmac.new(b"sec", raw, hashlib.sha256).hexdigest()})
+    check(db.q1("SELECT status FROM messages WHERE provider_ref='wamid.OUT1'")["status"] == "read", "read receipt recorded")
+
 print(f"\nAll {ok} checks passed.")

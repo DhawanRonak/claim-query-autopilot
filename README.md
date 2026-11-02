@@ -90,7 +90,12 @@ The AI only reads; the decision is a lookup in `app/taxonomy.py` (20 document ty
 | an explanation (reason for delay, habits) | n/a | Ask patient for a short signed note (a typed WhatsApp reply counts) |
 | nothing recognisable | n/a | Agent review |
 
+## WhatsApp via Meta Cloud API (free, preferred)
+Set `META_WA_TOKEN`, `META_WA_PHONE_NUMBER_ID`, `META_VERIFY_TOKEN` (any string) and `META_APP_SECRET`.
+Webhook: `<url>/webhooks/meta`, subscribe to **messages**. WhatsApp only allows free-text messages within
+24 hours of the patient last messaging the business number, so on the test number each recipient sends "hi" first.
+
 ## Known limits
-- Meta Cloud API is supported for sending; inbound replies are wired for Twilio.
+- Twilio's free trial sends only Twilio's fixed sample templates; use Meta (free) or an upgraded Twilio account.
 - A single PDF containing several different documents is classified as one document.
 - Business-initiated WhatsApp outside the 24-hour window needs an approved template in production.

@@ -23,7 +23,12 @@
     </form>
   </div>
   <div class="panel">
-    <h2>WhatsApp replies (Twilio)</h2>
+    <h2>WhatsApp replies (Meta Cloud API)</h2>
+    <p class="small">In Meta for Developers → your app → WhatsApp → Configuration → Webhook, set the <b>Callback URL</b> to:</p>
+    <pre class="msg mono">{{ meta_webhook }}</pre>
+    <p class="small">Verify token: the value of <span class="mono">META_VERIFY_TOKEN</span> ({{ 'set' if meta_verify_set else 'not set yet' }}). Then subscribe to the <b>messages</b> field.
+      Signature check: {{ 'on' if meta_secret_set else 'off (add META_APP_SECRET)' }}.</p>
+    <h2 style="margin-top:16px">WhatsApp replies (Twilio)</h2>
     <p class="small">In Twilio Console → Messaging → Try it out → WhatsApp sandbox settings, set <b>When a message comes in</b> to:</p>
     <pre class="msg mono">{{ webhook }}</pre>
     <p class="small muted">Method POST. Requests are verified with your Twilio auth token.</p>
