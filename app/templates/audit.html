@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Access log{% endblock %}
+{% block body %}
+<h1>Access log</h1>
+<p class="muted">Every login, patient view, file open, upload and denied attempt is recorded.</p>
+<div class="panel tablewrap"><table>
+<tr><th>When (IST)</th><th>User</th><th>Action</th><th>Target</th></tr>
+{% for r in rows %}
+<tr><td class="mono">{{ r.at|ist }}</td><td>{{ r.username }}</td>
+<td><span class="chip {{ 'c-bad' if 'DENIED' in r.action or 'FAILED' in r.action else 'c-mute' }}">{{ r.action }}</span></td>
+<td class="mono">{{ r.target }}</td></tr>
+{% endfor %}
+</table></div>
+{% endblock %}

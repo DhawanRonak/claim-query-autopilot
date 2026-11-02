@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Import{% endblock %}
+{% block body %}
+<h1>Import patients and documents</h1>
+<p class="muted">Upload care.fi's sample bundle as one ZIP. Every document is classified from its contents; any query letters are processed and messaged straight away.</p>
+<div class="grid g2">
+  <div class="panel">
+    <form method="post" enctype="multipart/form-data" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="file" name="file" accept=".zip,.csv,.xlsx,.json" required>
+      <button class="btn">Import</button>
+    </form>
+    {% if report %}
+    <h3 style="margin-top:16px">Import finished</h3>
+    <div class="kv">
+      <div>Patients created</div><div>{{ report.patients_created }}</div>
+      <div>Patients updated</div><div>{{ report.patients_updated }}</div>
+      <div>Documents added</div><div>{{ report.documents }}</div>
+      <div>Duplicates skipped</div><div>{{ report.duplicates }}</div>
+      <div>Query letters processed</div><div>{{ report.queries }}</div>
+    </div>
+    {% if report.unmatched_files %}
+      <p class="flag" style="margin-top:12px">{{ report.unmatched_files|length }} file(s) couldn't be matched to a patient:</p>
+      <ul class="small mono">{% for f in report.unmatched_files[:30] %}<li>{{ f }}</li>{% endfor %}</ul>
+    {% endif %}
+    <a class="btn ghost" href="/">Go to patients</a>
+    {% endif %}
+  </div>
+  <div class="panel small">
+    <h3>Accepted layout</h3>
+<pre class="msg">bundle.zip
+├── patients.csv          (or .xlsx / .json)
+├── CF-P001/              (folder per patient ID or name)
+│   ├── discharge.pdf
+│   └── aadhaar.jpg
+├── CF-P002_bill.pdf      (or ID as file prefix)
+└── queries/
+    └── CF-P001_letter.pdf</pre>
+    <p>Column names are matched loosely: <span class="mono">patient_id / id / uhid</span>, <span class="mono">name</span>, <span class="mono">phone / mobile</span>, <span class="mono">email</span>, <span class="mono">insurer / tpa</span>, <span class="mono">policy_no</span>, <span class="mono">claim_no</span>, <span class="mono">hospital</span>, <span class="mono">admission_date</span>, <span class="mono">assigned_agent</span>.</p>
+    <p>Each new patient gets a login (their ID in lower case without the dash).</p>
+  </div>
+</div>
+{% endblock %}

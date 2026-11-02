@@ -1,0 +1,21 @@
+{% macro status_chip(s) -%}
+{%- set cls = {'sent':'c-info','partially_received':'c-info','complete':'c-ok','no_patient_action':'c-ok',
+               'sent_needs_review':'c-warn','needs_review':'c-warn','processing':'c-mute','received':'c-mute',
+               'failed':'c-bad','send_failed':'c-bad'}.get(s, 'c-mute') -%}
+<span class="chip {{ cls }}">{{ STATUS_LABEL.get(s, s) }}</span>
+{%- endmacro %}
+
+{% macro decision_chip(d, received=False) -%}
+{%- if d == 'need_from_patient' and received -%}<span class="chip c-ok">Asked · now received</span>
+{%- elif d == 'need_from_patient' -%}<span class="chip c-warn">Ask patient</span>
+{%- elif d == 'in_locker' -%}<span class="chip c-ok">Already in locker</span>
+{%- elif d == 'hospital_team' -%}<span class="chip c-info">Hospital team</span>
+{%- elif d == 'not_needed' -%}<span class="chip c-mute">Not needed</span>
+{%- else -%}<span class="chip c-bad">Agent review</span>{%- endif -%}
+{%- endmacro %}
+
+{% macro msg_chip(s) -%}
+<span class="chip {{ {'sent':'c-info','delivered':'c-ok','read':'c-ok','received':'c-ok','failed':'c-bad','simulated':'c-mute'}.get(s,'c-mute') }}">{{ s }}</span>
+{%- endmacro %}
+
+{% macro csrf_field() -%}<input type="hidden" name="csrf" value="{{ csrf }}">{%- endmacro %}

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Patient Locker{% endblock %} · care.fi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f6f4; --panel:#ffffff; --ink:#16201c; --muted:#5d6b65; --line:#e3e7e4;
+  --brand:#0f6b5b; --brand-soft:#e3f1ed; --warn:#9a5b00; --warn-soft:#fdf1dc;
+  --bad:#b42318; --bad-soft:#fde8e6; --ok:#13795b; --ok-soft:#e1f4ec; --info:#2a5db0; --info-soft:#e6eefb;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Inter,system-ui,sans-serif}
+a{color:var(--brand);text-decoration:none} a:hover{text-decoration:underline}
+header.top{background:var(--ink);color:#fff}
+header.top .in{max-width:1180px;margin:auto;padding:12px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header.top .logo{font-weight:700;letter-spacing:.2px;color:#fff}
+header.top .logo span{color:#7fd6c2}
+header.top nav{display:flex;gap:14px;margin-left:auto;align-items:center;flex-wrap:wrap}
+header.top nav a{color:#cfe3dd}
+.role{font-size:11px;text-transform:uppercase;letter-spacing:.6px;background:#2b3a34;padding:2px 8px;border-radius:99px;color:#bfe9de}
+main{max-width:1180px;margin:auto;padding:20px 16px 60px}
+h1{font-size:22px;margin:0 0 4px} h2{font-size:16px;margin:0 0 12px} h3{font-size:14px;margin:0 0 8px}
+.muted{color:var(--muted)} .small{font-size:12px} .mono{font-family:"JetBrains Mono",monospace;font-size:12px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+.grid{display:grid;gap:16px} .g2{grid-template-columns:2fr 1fr} .g3{grid-template-columns:repeat(3,1fr)}
+@media (max-width:860px){.g2,.g3{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:0}
+.tablewrap{overflow-x:auto}
+.chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:500;white-space:nowrap}
+.c-ok{background:var(--ok-soft);color:var(--ok)} .c-warn{background:var(--warn-soft);color:var(--warn)}
+.c-bad{background:var(--bad-soft);color:var(--bad)} .c-info{background:var(--info-soft);color:var(--info)}
+.c-mute{background:#eef0ef;color:var(--muted)}
+.btn{display:inline-block;background:var(--brand);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn:hover{filter:brightness(1.08);text-decoration:none}
+.btn.ghost{background:transparent;color:var(--brand);border:1px solid var(--brand)}
+input,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;max-width:100%}
+form.inline{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:4px 12px}
+.kv div:nth-child(odd){color:var(--muted)}
+.stat{font-size:24px;font-weight:700}
+.check{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--line)}
+.check:last-child{border:0}
+pre.msg{white-space:pre-wrap;background:#f8faf9;border:1px solid var(--line);border-radius:8px;padding:12px;font:13px/1.5 Inter,sans-serif;margin:8px 0 0}
+details summary{cursor:pointer;color:var(--brand);font-weight:500}
+.flow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)}
+.flow b{color:var(--ink)}
+.flash{background:var(--info-soft);color:var(--info);padding:10px 14px;border-radius:8px;margin-bottom:16px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+.tabs a{padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:13px}
+.tabs a.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.tabs a:hover{text-decoration:none;border-color:var(--ink)}
+.g4{grid-template-columns:repeat(4,1fr)} @media (max-width:860px){.g4{grid-template-columns:repeat(2,1fr)}}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.kpi .stat{font-size:22px}
+select.mini{padding:3px 6px;font-size:12px}
+.btn.sm{padding:4px 10px;font-size:12px}
+.flag{color:var(--warn);font-size:12px}
+.banner{background:var(--warn-soft);color:var(--warn);padding:10px 14px;border-radius:8px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<header class="top"><div class="in">
+  <a class="logo" href="/">care<span>.fi</span> · Patient Locker</a>
+  {% if user %}
+  <nav>
+    {% if user.role != 'patient' %}<a href="/">Patients</a>{% endif %}
+    {% if user.role == 'admin' %}<a href="/import">Import</a><a href="/settings">Settings</a><a href="/audit">Access log</a>{% endif %}
+    <span class="role">{{ user.role }}</span>
+    <span>{{ user.display_name or user.username }}</span>
+    <a href="/logout">Log out</a>
+  </nav>
+  {% endif %}
+</div></header>
+<main>{% if flash %}<div class="flash">{{ flash }}</div>{% endif %}{% block body %}{% endblock %}</main>
+</body>
+</html>

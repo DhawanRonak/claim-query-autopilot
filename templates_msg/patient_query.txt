@@ -1,0 +1,20 @@
+# Patient message template. Lines starting with # are ignored.
+# Swap this file for care.fi's official template; keep the {placeholders}.
+# Available: {patient_first_name} {patient_name} {patient_id} {claim_no} {insurer}
+#            {hospital} {items} {item_count} {already_have} {deadline} {support_phone}
+SUBJECT: Action needed for your insurance claim {claim_no}
+Dear {patient_first_name},
+
+Your insurance company ({insurer}) has asked for a few more details before it can process your claim for treatment at {hospital}.
+
+Please send us the following ({item_count}):
+{items}
+
+{already_have}
+Please share them by {deadline}. You can reply on this WhatsApp chat with clear photos or PDFs, or reply to this email.
+
+If you have any questions, call us at {support_phone}.
+
+Thank you,
+Team care.fi
+(Claim ref: {claim_no} | Patient ID: {patient_id})

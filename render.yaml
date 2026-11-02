@@ -1,0 +1,39 @@
+# Render Blueprint: New > Blueprint > pick this repo.
+# Free plan: sleeps after 15 min idle (first visit then takes ~50 s) and data resets to the
+# 10 demo patients on each restart. For data that survives restarts, switch to plan: starter
+# and uncomment the disk block.
+services:
+  - type: web
+    name: carefi-patient-locker
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    # disk:
+    #   name: locker-data
+    #   mountPath: /data
+    #   sizeGB: 1
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: HTTPS_ONLY
+        value: "1"
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: WHATSAPP_OVERRIDE_TO
+        sync: false
+      - key: EMAIL_OVERRIDE_TO
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: SEED_ADMIN_PW
+        sync: false

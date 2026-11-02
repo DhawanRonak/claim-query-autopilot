@@ -1,0 +1,6 @@
+.env
+data/
+inbox/
+__pycache__/
+*.pyc
+*.zip

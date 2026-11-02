@@ -1,0 +1,13 @@
+# Reminder sent once, about 24 hours before the deadline, only for items still pending.
+SUBJECT: Reminder: documents still needed for claim {claim_no}
+Dear {patient_first_name},
+
+A quick reminder: we are still waiting for {item_count} item(s) for your claim with {insurer}:
+{items}
+
+Please share them by {deadline} so your claim isn't delayed. You can reply on this WhatsApp chat with clear photos or PDFs, or reply to this email.
+
+Questions? Call us at {support_phone}.
+
+Team care.fi
+(Claim ref: {claim_no} | Patient ID: {patient_id})

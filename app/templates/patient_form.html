@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ 'New patient' if new else 'Edit ' ~ p.name }}{% endblock %}
+{% block body %}
+<a class="small" href="{{ '/' if new else '/patients/' ~ p.id }}">← Back</a>
+<div class="panel" style="max-width:640px;margin-top:8px">
+  <h1>{{ 'New patient' if new else 'Edit patient' }}</h1>
+  <form method="post" style="display:grid;gap:10px;margin-top:12px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% set fields = [('id','Patient ID','CF-P011'),('name','Full name',''),('phone','WhatsApp number','+91…'),('email','Email',''),
+                     ('insurer','Insurer / TPA',''),('policy_no','Policy number',''),('claim_no','Claim number',''),
+                     ('hospital','Hospital',''),('admission_date','Admission date','YYYY-MM-DD'),('diagnosis','Diagnosis (internal only)','')] %}
+    {% for key, lbl, ph in fields %}
+      {% if key != 'id' or new %}
+      <label class="small">{{ lbl }}<br><input name="{{ key }}" value="{{ p[key] or '' }}" placeholder="{{ ph }}" style="width:100%" {{ 'required' if key in ('id','name','phone') }}></label>
+      {% endif %}
+    {% endfor %}
+    {% if user.role == 'admin' %}
+    <label class="small">Assigned agent<br>
+      <select name="assigned_agent" style="width:100%"><option value="">—</option>
+        {% for a in agents %}<option value="{{ a.username }}" {{ 'selected' if p.assigned_agent == a.username }}>{{ a.display_name or a.username }}</option>{% endfor %}
+      </select></label>
+    {% endif %}
+    <button class="btn" style="justify-self:start">{{ 'Create patient' if new else 'Save' }}</button>
+  </form>
+</div>
+{% endblock %}

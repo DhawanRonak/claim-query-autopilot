@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_chip, decision_chip, msg_chip %}
+{% block title %}{{ p.name }}{% endblock %}
+{% block body %}
+{% set staff = user.role in ('admin','agent') %}
+{% set full_contact = user.role in ('admin','patient') %}
+{% if staff %}<a class="small" href="/">← All patients</a>{% endif %}
+<div style="display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:12px;margin:6px 0 16px">
+  <div><h1>{{ p.name }}</h1><div class="mono muted">{{ p.id }} · Claim {{ p.claim_no or '—' }}</div></div>
+  {% if staff %}
+  <form class="inline panel" style="margin:0;padding:10px" method="post" action="/patients/{{ p.id }}/queries" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <b class="small">Add insurer query letter</b>
+    <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.txt" required>
+    <button class="btn">Upload</button>
+    <span class="small muted" style="width:100%">Reading, locker check and patient messages start automatically.</span>
+  </form>
+  {% endif %}
+</div>
+
+<div class="grid g3">
+  <div class="panel">
+    <h2>{{ 'What we need from you' if user.role == 'patient' else 'Pending from patient' }}</h2>
+    {% if open_items %}
+      <div class="stat">{{ open_items|length }}</div>
+      {% for c in open_items %}<div class="check"><span>{{ label(c) }}</span><span class="chip c-warn">Pending</span></div>{% endfor %}
+      {% if user.role == 'patient' %}<p class="small muted">Upload below, or reply on WhatsApp with clear photos or PDFs.</p>{% endif %}
+    {% else %}
+      <div class="stat">0</div><div class="muted">Nothing pending right now.</div>
+    {% endif %}
+  </div>
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between"><h2>Profile</h2>
+      {% if staff %}<a class="small" href="/patients/{{ p.id }}/edit">Edit</a>{% endif %}</div>
+    <div class="kv">
+      <div>Insurer</div><div>{{ p.insurer or '—' }}</div>
+      <div>Policy no.</div><div class="mono">{{ p.policy_no or '—' }}</div>
+      <div>Hospital</div><div>{{ p.hospital or '—' }}</div>
+      <div>Admitted</div><div>{{ p.admission_date or '—' }}</div>
+      <div>Phone</div><div>{{ p.phone if full_contact else mask_phone(p.phone) }}</div>
+      <div>Email</div><div>{{ p.email if full_contact else mask_email(p.email) }}</div>
+      {% if staff %}<div>Agent</div><div>{{ p.assigned_agent or '—' }}</div>{% endif %}
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Core documents</h2>
+    {% for code, lbl, ok in checklist %}
+      <div class="check"><span>{{ lbl }}</span>
+        {% if ok %}<span class="chip c-ok">✓ In locker</span>{% else %}<span class="chip c-mute">Not in locker</span>{% endif %}</div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="panel" id="queries">
+  <h2>Query letters</h2>
+  {% for qr in queries %}
+  <div id="q{{ qr.id }}" style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:12px" data-qid="{{ qr.id }}" data-status="{{ qr.status }}">
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+      <div><b><a href="/files/query/{{ qr.id }}" target="_blank">{{ qr.filename }}</a></b>
+        <div class="small muted">Added {{ qr.uploaded_at|ist }} by {{ qr.uploaded_by }}{% if qr.engine %} · read by {{ qr.engine }}{% endif %}{% if qr.deadline_at %} · patient deadline {{ qr.deadline_at }}{% endif %}</div></div>
+      <div style="text-align:right">{{ status_chip(qr.status) }}
+        {% if qr.latency %}<div class="small muted">message sent {{ qr.latency }} after upload</div>{% endif %}
+        {% if qr.reminder_sent_at %}<div class="small muted">reminder sent {{ qr.reminder_sent_at|ist }}</div>{% endif %}</div>
+    </div>
+    {% if qr.error and staff %}<pre class="msg" style="color:var(--bad)">{{ qr.error[:400] }}</pre>{% endif %}
+    {% if qr.points %}
+    <div class="tablewrap"><table style="margin-top:8px">
+      <tr><th>#</th><th>Insurer is asking for</th><th>Maps to</th><th>Decision</th></tr>
+      {% for pt in qr.points %}
+      {% set got = pt.decision == 'need_from_patient' and pt.missing_patient and (pt.missing_patient|reject('in', qr.received)|list|length == 0) %}
+      <tr>
+        <td>{{ pt.idx }}</td>
+        <td>{{ pt.text }}{% if pt.fresh_copy_needed %} <span class="chip c-warn">fresh copy</span>{% endif %}
+          {% if pt.overridden_by %}<div class="small muted">set by {{ pt.overridden_by }}</div>{% endif %}</td>
+        <td class="small">{% for c in pt.doc_types %}{{ label(c) }}{% if not loop.last %}, {% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td>
+        <td>
+          {% if staff %}
+          <form method="post" action="/queries/{{ qr.id }}/points/{{ pt.id }}" style="margin:0">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            {{ decision_chip(pt.decision, got) }}
+            <select class="mini" name="decision" onchange="this.form.submit()" title="Change decision" aria-label="Change decision for point {{ pt.idx }}">
+              <option value="">change…</option>
+              {% for k, v in DECISIONS.items() %}{% if k != pt.decision %}<option value="{{ k }}">{{ v }}</option>{% endif %}{% endfor %}
+            </select>
+          </form>
+          {% else %}{{ decision_chip(pt.decision, got) }}{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    {% elif qr.status in ('received','processing') %}<p class="muted">Reading the letter…</p>{% endif %}
+    {% if staff and qr.points %}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <form method="post" action="/queries/{{ qr.id }}/resend"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm">Send updated message</button></form>
+      {% if qr.pending %}<form method="post" action="/queries/{{ qr.id }}/remind"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm">Send reminder now</button></form>{% endif %}
+      <form method="post" action="/queries/{{ qr.id }}/reprocess" onsubmit="return confirm('Read the letter again from scratch? Agent changes on this query will be lost.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm">Re-read letter</button></form>
+    </div>
+    {% endif %}
+  </div>
+  {% else %}<p class="muted">No query letters.</p>{% endfor %}
+</div>
+
+<div class="panel" id="messages">
+  <h2>Messages</h2>
+  {% for m in msgs %}
+  <div style="border-bottom:1px solid var(--line);padding:10px 0">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <b>{{ '↙ From patient' if m.direction == 'in' else '↗' }} {{ 'WhatsApp' if m.channel == 'whatsapp' else 'Email' }}</b>
+      {% if m.direction == 'out' %}<span class="chip c-mute">{{ m.kind }}</span>{% endif %}
+      {{ msg_chip(m.status) }}
+      <span class="small muted">{{ m.created_at|ist }}{% if m.query_id %} · query #{{ m.query_id }}{% endif %}
+        · {{ 'from' if m.direction == 'in' else 'to' }} {{ m.to_addr if full_contact else (mask_phone(m.to_addr) if m.channel=='whatsapp' else mask_email(m.to_addr)) }}</span>
+    </div>
+    {% if m.error and m.status not in ('simulated',) and staff %}<div class="small" style="color:var(--bad)">{{ m.error }}</div>{% endif %}
+    <details {% if loop.first %}open{% endif %}><summary class="small">Show message</summary>
+      {% if m.subject %}<div class="small" style="margin-top:6px"><b>Subject:</b> {{ m.subject }}</div>{% endif %}
+      <pre class="msg">{{ m.body }}</pre></details>
+  </div>
+  {% else %}<p class="muted">No messages yet.</p>{% endfor %}
+</div>
+
+<div class="panel" id="documents">
+  <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:center">
+    <h2 style="margin:0">Documents</h2>
+    <form class="inline" method="post" action="/patients/{{ p.id }}/documents" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="file" name="files" accept=".pdf,.png,.jpg,.jpeg,.txt" multiple required>
+      <select name="doc_type"><option value="">Detect type automatically</option>
+        {% for code, meta in doc_types %}<option value="{{ code }}">{{ meta.label }}</option>{% endfor %}</select>
+      <button class="btn">Add</button>
+    </form>
+  </div>
+  <div class="tablewrap"><table style="margin-top:8px">
+    <tr><th>Type</th><th>File</th><th>Added</th></tr>
+    {% for d in docs %}
+    <tr>
+      <td>
+        {% if staff %}
+        <form method="post" action="/documents/{{ d.id }}/type" style="margin:0">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <select class="mini" name="doc_type" onchange="this.form.submit()" aria-label="Document type">
+            {% for code, meta in doc_types %}<option value="{{ code }}" {{ 'selected' if code == d.doc_type }}>{{ meta.label }}</option>{% endfor %}
+          </select>
+        </form>
+        {% else %}{{ label(d.doc_type) }}{% endif %}
+        {% if staff and d.classified_by %}<div class="small muted">by {{ d.classified_by }}{% if d.confidence is not none and d.classified_by != 'agent' %} · {{ (d.confidence * 100)|round|int }}%{% endif %}</div>{% endif %}
+      </td>
+      <td><a href="/files/doc/{{ d.id }}" target="_blank">{{ d.filename }}</a>
+        {% if d.flag and staff %}<div class="flag">⚠ {{ d.flag }}
+          <form method="post" action="/documents/{{ d.id }}/clear-flag" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm" style="padding:1px 8px">Checked</button></form></div>{% endif %}</td>
+      <td class="small muted">{{ d.uploaded_at|ist }}<br>{{ d.source }} · {{ d.uploaded_by }}</td>
+    </tr>
+    {% else %}<tr><td colspan="3" class="muted">No documents yet.</td></tr>{% endfor %}
+  </table></div>
+</div>
+
+<script>
+// live refresh while a query is being read
+(function(){
+  const pending=[...document.querySelectorAll('[data-qid]')].filter(e=>['received','processing'].includes(e.dataset.status));
+  if(!pending.length) return;
+  const tick=async()=>{
+    for(const el of pending){
+      try{const r=await fetch('/api/queries/'+el.dataset.qid);const j=await r.json();
+        if(j.status!==el.dataset.status){location.reload();return;}}catch(e){}
+    }
+    setTimeout(tick,1000);
+  };
+  setTimeout(tick,800);
+})();
+</script>
+{% endblock %}

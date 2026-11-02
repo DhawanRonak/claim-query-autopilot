@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from "_macros.html" import status_chip %}
+{% block title %}Patients{% endblock %}
+{% block body %}
+<div style="display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+  <div>
+    <h1>Patients</h1>
+    <div class="muted">{% if user.role == 'agent' %}Cases assigned to you{% else %}All cases{% endif %}</div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span class="flow">Reader <b>{{ engine.split(' ')[0] }}</b> · WhatsApp <b>{{ wa }}</b> · Email <b>{{ 'on' if email_on else 'simulated' }}</b></span>
+    {% if user.role == 'admin' %}<a class="btn" href="/patients/new">+ New patient</a>{% endif %}
+  </div>
+</div>
+
+{% if wa == 'simulated' or not email_on %}
+<div class="banner small">One or more channels are in simulated mode: messages are written and logged but not delivered.{% if user.role == 'admin' %} <a href="/settings">Check settings</a>.{% endif %}</div>
+{% endif %}
+
+<div class="grid g4" style="margin-bottom:16px">
+  <div class="kpi"><div class="small muted">Waiting on patient</div><div class="stat">{{ counts.waiting }}</div></div>
+  <div class="kpi"><div class="small muted">Needs your attention</div><div class="stat" style="color:{{ 'var(--warn)' if counts.attention else 'inherit' }}">{{ counts.attention }}</div></div>
+  <div class="kpi"><div class="small muted">Resolved queries</div><div class="stat">{{ counts.complete }}</div></div>
+  <div class="kpi"><div class="small muted">Avg. upload → message</div><div class="stat">{{ counts.avg_latency }}</div></div>
+</div>
+
+<div class="grid g2">
+  <div class="panel">
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="tabs">
+        <a href="/?view=all&q={{ q }}" class="{{ 'on' if view=='all' }}">All</a>
+        <a href="/?view=attention&q={{ q }}" class="{{ 'on' if view=='attention' }}">Needs attention</a>
+        <a href="/?view=waiting&q={{ q }}" class="{{ 'on' if view=='waiting' }}">Waiting on patient</a>
+      </div>
+      <form method="get" class="inline"><input type="hidden" name="view" value="{{ view }}">
+        <input name="q" value="{{ q }}" placeholder="Search name, ID, claim, insurer" style="width:240px"></form>
+    </div>
+    <div class="tablewrap"><table>
+      <tr><th>Patient</th><th>Insurer · claim</th><th>Docs</th><th>Status</th></tr>
+      {% for p in rows %}
+      <tr>
+        <td><a href="/patients/{{ p.id }}"><b>{{ p.name }}</b></a><div class="mono muted">{{ p.id }}</div></td>
+        <td>{{ p.insurer or '—' }}<div class="mono muted">{{ p.claim_no or '' }}</div></td>
+        <td>{{ p.docs }}{% if p.flagged %}<div class="flag">{{ p.flagged }} to check</div>{% endif %}</td>
+        <td>{% if p.lq %}{{ status_chip(p.lq.status) }}{% if p.pending %}<div class="small muted">{{ p.pending }} item{{ '' if p.pending == 1 else 's' }} pending</div>{% endif %}
+            {% else %}<span class="muted small">No queries yet</span>{% endif %}</td>
+      </tr>
+      {% else %}<tr><td colspan="4" class="muted">No patients match.</td></tr>{% endfor %}
+    </table></div>
+  </div>
+  <div class="panel">
+    <h2>Latest query letters</h2>
+    {% for r in recent %}
+      <div style="padding:8px 0;border-bottom:1px solid var(--line)">
+        <a href="/patients/{{ r.patient_id }}#q{{ r.id }}"><b>{{ r.name }}</b></a>
+        <div class="small muted">{{ r.filename }} · {{ r.uploaded_at|ist }}</div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:4px;flex-wrap:wrap">{{ status_chip(r.status) }}
+          {% if r.latency %}<span class="small muted">message sent {{ r.latency }} after upload</span>{% endif %}</div>
+      </div>
+    {% else %}<p class="muted">No query letters yet.</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}
