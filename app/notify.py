@@ -15,7 +15,7 @@ def _wa_number(phone: str) -> str:
     return p
 
 
-GRAPH = "https://graph.facebook.com/v21.0"
+GRAPH = "https://graph.facebook.com/v25.0"
 
 
 def whatsapp_provider() -> str:
