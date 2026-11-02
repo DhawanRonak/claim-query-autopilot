@@ -99,9 +99,11 @@ def _mime(filename: str) -> str:
 
 
 # ---- engines -----------------------------------------------------------------
+GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
+
+
 def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text follows (may be empty if scanned):\n\n"):
     system = system or SYSTEM.format(codes=_codes_block())
-    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     parts = [{"text": prefix + (text or "")}]
     if file_bytes and _mime(filename) != "text/plain":
         parts.append({"inline_data": {"mime_type": _mime(filename),
@@ -109,10 +111,27 @@ def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text f
     body = {"system_instruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": 0, "response_mime_type": "application/json"}}
-    r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                   params={"key": os.environ["GEMINI_API_KEY"]}, json=body, timeout=TIMEOUT)
-    r.raise_for_status()
-    return _parse_json(r.json()["candidates"][0]["content"]["parts"][0]["text"])
+    models = [m for m in [os.getenv("GEMINI_MODEL")] + GEMINI_MODELS if m]
+    last = ""
+    for model in dict.fromkeys(models):           # try each model once, in order
+        for attempt in range(2):
+            r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                           headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, json=body, timeout=TIMEOUT)
+            if r.status_code == 200:
+                return _parse_json(r.json()["candidates"][0]["content"]["parts"][0]["text"])
+            try:
+                msg = r.json().get("error", {}).get("message", "")[:160]
+            except Exception:
+                msg = r.text[:160]
+            last = f"Gemini {r.status_code} on {model}: {msg}"
+            if r.status_code in (429, 500, 503) and attempt == 0:
+                import time
+                time.sleep(2)
+                continue
+            break
+        if r.status_code in (400, 401, 403):       # key/permission problem: other models won't help
+            break
+    raise RuntimeError(last)
 
 
 def _anthropic(text, file_bytes, filename, system=None, prefix="Query letter text follows (may be empty if scanned):\n\n"):
@@ -230,7 +249,7 @@ def extract_points(text: str, file_bytes: bytes = b"", filename: str = "") -> tu
     except Exception as e:  # never block the pipeline on an API hiccup
         if name == "rules":
             raise
-        out, name = _rules(text), f"rules (fallback: {type(e).__name__})"
+        out, name = _rules(text), f"rules (fallback: {str(e)[:200] or type(e).__name__})"
     # sanitise: keep only known codes, fill missing reasons
     for p in out.get("points", []):
         p["doc_types"] = [c for c in p.get("doc_types", []) if c in DOC_TYPES]
@@ -249,4 +268,4 @@ def call_llm(system: str, text: str, file_bytes: bytes, filename: str, prefix: s
     try:
         return ENGINES[name](text, file_bytes, filename, system=system, prefix=prefix), name
     except Exception as e:
-        return None, f"rules (fallback: {type(e).__name__})"
+        return None, f"rules (fallback: {str(e)[:200] or type(e).__name__})"

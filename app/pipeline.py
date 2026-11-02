@@ -163,6 +163,8 @@ def _fields(patient, asks, already, deadline_str):
         "already_have": already, "deadline": deadline_str,
         "support_phone": os.getenv("SUPPORT_PHONE", "+91-80-0000-0000"),
         "brand": os.getenv("BRAND_NAME", "care.fi"),
+        "portal_url": (os.getenv("PUBLIC_BASE_URL") or "the patient portal").rstrip("/"),
+        "patient_login": re.sub(r"[^a-z0-9]", "", patient["id"].lower()),
     }
 
 

@@ -5,7 +5,8 @@ Dear {patient_first_name},
 A quick reminder: we are still waiting for {item_count} item(s) for your claim with {insurer}:
 {items}
 
-Please share them by {deadline} so your claim isn't delayed. You can reply on this WhatsApp chat with clear photos or PDFs, or reply to this email.
+Please share them by {deadline} so your claim isn't delayed. Upload clear photos or PDFs in your Patient Locker: {portal_url}
+(Login: {patient_login}). You can also send them on WhatsApp.
 
 Questions? Call us at {support_phone}.
 
