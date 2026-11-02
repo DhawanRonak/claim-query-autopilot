@@ -85,6 +85,27 @@ def send_email(to_addr: str, subject: str, body: str) -> tuple[str, str, str, st
 
 
 def _send_email(to: str, subject: str, body: str) -> tuple[str, str, str]:
+    # HTTPS email APIs first: many hosts (e.g. Render's free plan) block outbound SMTP ports
+    try:
+        if os.getenv("RESEND_API_KEY"):
+            r = httpx.post("https://api.resend.com/emails", timeout=20,
+                           headers={"Authorization": f"Bearer {os.environ['RESEND_API_KEY']}"},
+                           json={"from": os.getenv("EMAIL_FROM") or "Claim Query Autopilot <onboarding@resend.dev>",
+                                 "to": [to], "subject": subject, "text": body})
+            if r.status_code >= 300:
+                return "failed", "", f"Resend {r.status_code}: {r.text[:300]}"
+            return "sent", r.json().get("id", ""), ""
+        if os.getenv("BREVO_API_KEY"):
+            sender = os.getenv("EMAIL_FROM_ADDRESS") or os.getenv("SMTP_USER") or ""
+            r = httpx.post("https://api.brevo.com/v3/smtp/email", timeout=20,
+                           headers={"api-key": os.environ["BREVO_API_KEY"], "accept": "application/json"},
+                           json={"sender": {"email": sender, "name": os.getenv("BRAND_NAME", "Claim Query Autopilot")},
+                                 "to": [{"email": to}], "subject": subject, "textContent": body})
+            if r.status_code >= 300:
+                return "failed", "", f"Brevo {r.status_code}: {r.text[:300]}"
+            return "sent", r.json().get("messageId", ""), ""
+    except Exception as e:
+        return "failed", "", f"{type(e).__name__}: {e}"
     host, user, pw = os.getenv("SMTP_HOST"), os.getenv("SMTP_USER"), os.getenv("SMTP_PASSWORD")
     if not (host and user and pw):
         return "simulated", "", "Email not configured (see .env)"
@@ -103,8 +124,18 @@ def _send_email(to: str, subject: str, body: str) -> tuple[str, str, str]:
         return "failed", "", f"{type(e).__name__}: {e}"
 
 
+def email_provider() -> str:
+    if os.getenv("RESEND_API_KEY"):
+        return "resend"
+    if os.getenv("BREVO_API_KEY"):
+        return "brevo"
+    if os.getenv("SMTP_HOST") and os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"):
+        return "smtp"
+    return "simulated"
+
+
 def email_configured() -> bool:
-    return bool(os.getenv("SMTP_HOST") and os.getenv("SMTP_USER") and os.getenv("SMTP_PASSWORD"))
+    return email_provider() != "simulated"
 
 
 def download_twilio_media(url: str) -> bytes:

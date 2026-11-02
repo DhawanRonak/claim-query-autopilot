@@ -9,7 +9,7 @@
     <div class="kv">
       <div>Letter reader</div><div><b>{{ engine }}</b>{% if engine == 'rules' %} <span class="small muted">(add GEMINI_API_KEY for scanned letters and photos)</span>{% endif %}</div>
       <div>WhatsApp</div><div><b>{{ wa }}</b></div>
-      <div>Email</div><div><b>{{ 'SMTP on' if email_on else 'simulated' }}</b></div>
+      <div>Email</div><div><b>{{ email_prov }}</b></div>
       <div>WhatsApp routing</div><div>{{ ('all messages → ' ~ wa_override) if wa_override else "each patient's own number" }}</div>
       <div>Email routing</div><div>{{ ('all messages → ' ~ email_override) if email_override else "each patient's own email" }}</div>
       <div>Public URL</div><div>{{ base or 'not set (needed for WhatsApp replies and read receipts)' }}</div>

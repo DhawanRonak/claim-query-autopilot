@@ -21,7 +21,7 @@ from . import db  # noqa: E402
 from .importer import import_bundle  # noqa: E402
 from .inbound import handle_meta, handle_whatsapp  # noqa: E402
 from .llm import engine_name  # noqa: E402
-from .notify import email_configured, meta_signature_ok, send_email, send_whatsapp, twilio_signature_ok, whatsapp_provider  # noqa: E402
+from .notify import email_configured, email_provider, meta_signature_ok, send_email, send_whatsapp, twilio_signature_ok, whatsapp_provider  # noqa: E402
 from .pipeline import (OPEN_STATUSES, add_document, notify_for_query, pending_for_query, point_rows,  # noqa: E402
                        process_query, refresh_progress, run_due_reminders, send_reminder)
 from .taxonomy import DOC_TYPES, PATIENT_SOURCED, label  # noqa: E402
@@ -514,7 +514,7 @@ def settings_page(request: Request):
     admin_only(user)
     base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
     return page(request, "settings.html", {
-        "engine": engine_name(), "wa": whatsapp_provider(), "email_on": email_configured(),
+        "engine": engine_name(), "wa": whatsapp_provider(), "email_on": email_configured(), "email_prov": email_provider(),
         "wa_override": os.getenv("WHATSAPP_OVERRIDE_TO"), "email_override": os.getenv("EMAIL_OVERRIDE_TO"),
         "base": base, "webhook": f"{base or 'https://<your-public-url>'}/webhooks/twilio/whatsapp",
         "meta_webhook": f"{base or 'https://<your-public-url>'}/webhooks/meta",
@@ -588,7 +588,7 @@ async def meta_inbound(request: Request, bg: BackgroundTasks):
 # ---- JSON API -------------------------------------------------------------------
 @app.get("/healthz")
 def healthz():
-    return {"ok": True, "engine": engine_name(), "whatsapp": whatsapp_provider(), "email": email_configured()}
+    return {"ok": True, "engine": engine_name(), "whatsapp": whatsapp_provider(), "email": email_provider()}
 
 
 @app.get("/api/queries/{qid}")
