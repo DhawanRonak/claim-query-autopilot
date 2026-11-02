@@ -4,7 +4,7 @@
 # and uncomment the disk block.
 services:
   - type: web
-    name: carefi-patient-locker
+    name: claim-query-autopilot
     runtime: docker
     plan: free
     healthCheckPath: /healthz

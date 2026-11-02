@@ -1,4 +1,7 @@
-# care.fi Patient Locker · Auto Query Response
+# Claim Query Autopilot
+
+Auto-reads health-insurance query letters and gets the missing documents from patients over WhatsApp and email.
+Originally built as a product case study for [care.fi](https://care.fi).
 
 A DigiLocker-style portal for patients' claim documents. When an insurer's query letter lands in a
 patient's locker, the system reads it, checks the locker, and messages the patient on WhatsApp and
