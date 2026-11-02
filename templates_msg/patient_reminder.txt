@@ -9,5 +9,5 @@ Please share them by {deadline} so your claim isn't delayed. You can reply on th
 
 Questions? Call us at {support_phone}.
 
-Team care.fi
+Team {brand}
 (Claim ref: {claim_no} | Patient ID: {patient_id})

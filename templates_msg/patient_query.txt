@@ -1,7 +1,7 @@
 # Patient message template. Lines starting with # are ignored.
 # Swap this file for care.fi's official template; keep the {placeholders}.
 # Available: {patient_first_name} {patient_name} {patient_id} {claim_no} {insurer}
-#            {hospital} {items} {item_count} {already_have} {deadline} {support_phone}
+#            {hospital} {items} {item_count} {already_have} {deadline} {support_phone} {brand}
 SUBJECT: Action needed for your insurance claim {claim_no}
 Dear {patient_first_name},
 
@@ -16,5 +16,5 @@ Please share them by {deadline}. You can reply on this WhatsApp chat with clear 
 If you have any questions, call us at {support_phone}.
 
 Thank you,
-Team care.fi
+Team {brand}
 (Claim ref: {claim_no} | Patient ID: {patient_id})

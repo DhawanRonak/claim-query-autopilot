@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Patient Locker{% endblock %} · care.fi</title>
+<title>{% block title %}Patient Locker{% endblock %} · {{ BRAND }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
@@ -68,7 +68,7 @@ select.mini{padding:3px 6px;font-size:12px}
 </head>
 <body>
 <header class="top"><div class="in">
-  <a class="logo" href="/">care<span>.fi</span> · Patient Locker</a>
+  <a class="logo" href="/">{{ BRAND }} · Patient Locker</a>
   {% if user %}
   <nav>
     {% if user.role != 'patient' %}<a href="/">Patients</a>{% endif %}

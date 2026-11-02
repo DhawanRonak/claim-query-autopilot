@@ -69,7 +69,7 @@ def ist(ts):
         return ts[:16]
 
 
-templates.env.globals.update(label=label, DOC_TYPES=DOC_TYPES, jload=db.jload, STATUS_LABEL=STATUS_LABEL,
+templates.env.globals.update(BRAND=os.getenv("BRAND_NAME", "care.fi"), label=label, DOC_TYPES=DOC_TYPES, jload=db.jload, STATUS_LABEL=STATUS_LABEL,
                              DECISIONS=DECISIONS, mask_phone=mask_phone, mask_email=mask_email)
 templates.env.filters["ist"] = ist
 

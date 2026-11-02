@@ -162,6 +162,7 @@ def _fields(patient, asks, already, deadline_str):
         "items": "\n".join(f"{i}. {a}" for i, a in enumerate(asks, 1)), "item_count": len(asks),
         "already_have": already, "deadline": deadline_str,
         "support_phone": os.getenv("SUPPORT_PHONE", "+91-80-0000-0000"),
+        "brand": os.getenv("BRAND_NAME", "care.fi"),
     }
 
 
