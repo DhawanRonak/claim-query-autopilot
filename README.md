@@ -3,6 +3,15 @@
 Auto-reads health-insurance query letters and gets the missing documents from patients over WhatsApp and email.
 Originally built as a product case study for [care.fi](https://care.fi).
 
+**Live demo:** https://claim-query-autopilot.onrender.com · **5-minute tour:** https://claim-query-autopilot.onrender.com/guide
+(free hosting: the first visit after a quiet spell can take ~50 s to wake up)
+
+| Channel | Status |
+|---|---|
+| Letter reading | Live: Gemini AI, with a rules-based backup so no letter is ever stuck |
+| Email | Live via Resend (free plan delivers to the project owner's test inbox; Brevo/SMTP supported for any recipient) |
+| WhatsApp | Built and tested (Meta Cloud API + Twilio: sending, patient replies with files, read receipts). The new Meta business account is awaiting Meta's review, so messages show on the patient's page in preview until it's unlocked |
+
 A DigiLocker-style portal for patients' claim documents. When an insurer's query letter lands in a
 patient's locker, the system reads it, checks the locker, and messages the patient on WhatsApp and
 email with exactly what's still needed. When the patient replies on WhatsApp, their files go

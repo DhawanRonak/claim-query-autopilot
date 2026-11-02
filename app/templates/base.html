@@ -72,6 +72,7 @@ select.mini{padding:3px 6px;font-size:12px}
   {% if user %}
   <nav>
     {% if user.role != 'patient' %}<a href="/">Patients</a>{% endif %}
+    <a href="/guide">Tour</a>
     {% if user.role == 'admin' %}<a href="/import">Import</a><a href="/settings">Settings</a><a href="/audit">Access log</a>{% endif %}
     <span class="role">{{ user.role }}</span>
     <span>{{ user.display_name or user.username }}</span>

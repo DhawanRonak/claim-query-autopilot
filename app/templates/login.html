@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Sign in{% endblock %}
 {% block body %}
-<div class="panel" style="max-width:380px;margin:60px auto">
+<div class="panel" style="max-width:380px;margin:60px auto 16px">
   <h1>Sign in</h1>
   <p class="muted small">Staff see only the patients assigned to them. Patients see only their own locker.</p>
   {% if err %}<p class="chip c-bad">{{ err }}</p>{% endif %}
@@ -10,5 +10,8 @@
     <input name="password" type="password" placeholder="Password" autocomplete="current-password" required>
     <button class="btn">Sign in</button>
   </form>
+</div>
+<div style="max-width:380px;margin:0 auto;text-align:center">
+  <a class="btn ghost" href="/guide" style="width:100%;box-sizing:border-box">First time here? Take the 5-minute tour →</a>
 </div>
 {% endblock %}

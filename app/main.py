@@ -173,6 +173,11 @@ async def security_headers(request: Request, call_next):
 _fails: dict[str, list[float]] = {}
 
 
+@app.get("/guide", response_class=HTMLResponse)
+def guide(request: Request):
+    return page(request, "guide.html", {"engine": engine_name(), "wa": whatsapp_provider(), "email_prov": email_provider()})
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     return page(request, "login.html", {"user": None, "err": None})

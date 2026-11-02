@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Start here{% endblock %}
+{% block body %}
+<div style="max-width:880px;margin:0 auto">
+  <h1>Start here: a 5-minute tour</h1>
+  <p class="muted">Claim Query Autopilot reads an insurer's query letter the moment it lands in a patient's locker,
+    checks what's already there, and messages the patient with only what's missing. No one clicks anything in between.</p>
+
+  <div class="panel">
+    <h2>Logins</h2>
+    <div class="tablewrap"><table>
+      <tr><th>Who</th><th>Username</th><th>Password</th><th>Sees</th></tr>
+      <tr><td>Ops admin</td><td class="mono">admin</td><td class="mono">CareFi@2026</td><td>All patients, import, settings, access log</td></tr>
+      <tr><td>Agent</td><td class="mono">agent.priya</td><td class="mono">Agent@2026</td><td>Only patients CF-P001 to P005</td></tr>
+      <tr><td>Agent</td><td class="mono">agent.rahul</td><td class="mono">Agent@2026</td><td>Only patients CF-P006 to P010</td></tr>
+      <tr><td>Patient</td><td class="mono">p001 … p010</td><td class="mono">Patient@2026</td><td>Only their own locker</td></tr>
+    </table></div>
+  </div>
+
+  <div class="panel">
+    <h2>Try it</h2>
+    <ol style="line-height:1.8;padding-left:20px;margin:0">
+      <li><b>Get a sample letter.</b> Download one from
+        <a href="https://github.com/DhawanRonak/claim-query-autopilot/tree/main/sample_queries" target="_blank" rel="noopener">sample_queries on GitHub</a>
+        (file names start with the patient ID, e.g. <span class="mono">CF-P001_star_query.pdf</span>), or use your own.</li>
+      <li><b>Upload it.</b> <a href="/login">Log in</a> as <span class="mono">admin</span>, open that patient, and use <b>Add insurer query letter</b>.</li>
+      <li><b>Watch it work.</b> Within seconds the page shows every point in the letter, what it maps to, and the decision:
+        <span class="chip c-ok">Already in locker</span> <span class="chip c-warn">Ask patient</span>
+        <span class="chip c-info">Hospital team</span> <span class="chip c-bad">Agent review</span>.</li>
+      <li><b>Read the message.</b> Scroll to <b>Messages</b>: the email and WhatsApp text sent to the patient, each item with a plain-language "why".</li>
+      <li><b>Be the patient.</b> Log in as <span class="mono">p001</span>: see what's pending, upload a document, and watch the item tick off.</li>
+      <li><b>Check access.</b> As <span class="mono">agent.priya</span>, open <a href="/patients/CF-P006">CF-P006</a>: it's blocked and logged in admin's <b>Access log</b>.</li>
+      <li><b>Bulk load.</b> Admin → <b>Import</b> accepts a ZIP of patient profiles, documents and query letters.</li>
+    </ol>
+  </div>
+
+  <div class="panel">
+    <h2>What's live right now</h2>
+    <div class="kv">
+      <div>Letter reading</div><div><b>{{ 'AI (Gemini)' if engine == 'gemini' else engine }}</b>, with a rules-based backup so a letter is never stuck</div>
+      <div>Email</div><div>{% if email_prov == 'resend' %}<b>Live</b>, delivered to the project owner's test inbox (free email plan); every message is also shown in full on the patient's page{% elif email_prov == 'simulated' %}<b>Preview</b>: written and shown on the patient's page{% else %}<b>Live</b> via {{ email_prov }}{% endif %}</div>
+      <div>WhatsApp</div><div>{% if wa == 'simulated' %}<b>Built, in preview</b>: integrated with Meta's WhatsApp Cloud API (sending, patient replies with files, read receipts); the new business account is awaiting Meta's review, so messages are shown on the patient's page until it's unlocked{% else %}<b>Live</b> via {{ wa }}{% endif %}</div>
+      <div>Speed</div><div>Upload to message sent: typically under 1 second (rules) or a few seconds (AI)</div>
+      <div>Hosting note</div><div>Free hosting: the first visit after a quiet spell can take ~50 seconds to wake up</div>
+    </div>
+  </div>
+
+  <p class="small muted">Source: <a href="https://github.com/DhawanRonak/claim-query-autopilot" target="_blank" rel="noopener">github.com/DhawanRonak/claim-query-autopilot</a></p>
+  <a class="btn" href="/login">Log in</a>
+</div>
+{% endblock %}
