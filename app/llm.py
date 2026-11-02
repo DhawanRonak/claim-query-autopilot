@@ -113,10 +113,18 @@ def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text f
             "generationConfig": {"temperature": 0, "response_mime_type": "application/json"}}
     models = [m for m in [os.getenv("GEMINI_MODEL")] + GEMINI_MODELS if m]
     last = ""
+    import time
+    deadline = time.time() + 45                    # never keep the patient waiting more than ~45 s
     for model in dict.fromkeys(models):           # try each model once, in order
         for attempt in range(2):
-            r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                           headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, json=body, timeout=TIMEOUT)
+            if time.time() > deadline:
+                raise RuntimeError(last or "Gemini took too long")
+            try:
+                r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                           headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, json=body, timeout=20)
+            except httpx.TimeoutException:
+                last = f"Gemini timed out on {model}"
+                break
             if r.status_code == 200:
                 return _parse_json(r.json()["candidates"][0]["content"]["parts"][0]["text"])
             try:
@@ -125,11 +133,10 @@ def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text f
                 msg = r.text[:160]
             last = f"Gemini {r.status_code} on {model}: {msg}"
             if r.status_code in (429, 500, 503) and attempt == 0:
-                import time
                 time.sleep(2)
                 continue
             break
-        if r.status_code in (400, 401, 403):       # key/permission problem: other models won't help
+        if "timed out" not in last and r.status_code in (400, 401, 403):  # key problem: other models won't help
             break
     raise RuntimeError(last)
 

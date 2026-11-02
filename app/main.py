@@ -646,7 +646,14 @@ def _reminders():
         time.sleep(300)
 
 
+def _resume_unfinished():
+    """A restart (e.g. a redeploy) can interrupt a letter mid-read: pick those up again."""
+    for qrow in db.q("SELECT id FROM queries WHERE status IN ('received','processing')"):
+        threading.Thread(target=process_query, args=(qrow["id"],), daemon=True).start()
+
+
 @app.on_event("startup")
 def _start_background():
+    _resume_unfinished()
     threading.Thread(target=_watch_inbox, daemon=True).start()
     threading.Thread(target=_reminders, daemon=True).start()
