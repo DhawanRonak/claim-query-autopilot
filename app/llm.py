@@ -1,7 +1,8 @@
 """Reads a query letter and returns the separate points the insurer raised.
 
-Engines, picked automatically from .env (first one with a key wins):
+Engines, picked automatically from .env (every one with a key is tried in this order, then rules):
   gemini    -> GEMINI_API_KEY     (free key from aistudio.google.com)
+  xai       -> XAI_API_KEY        (Grok; text letters only)
   anthropic -> ANTHROPIC_API_KEY
   openai    -> OPENAI_API_KEY
   rules     -> no key needed; regex + keyword parser so the demo always runs
@@ -9,6 +10,7 @@ Engines, picked automatically from .env (first one with a key wins):
 Gemini and Claude receive the PDF/image itself when the letter has no text
 layer (scanned letters), so OCR comes for free.
 """
+import logging
 import base64
 import json
 import os
@@ -65,19 +67,32 @@ Return ONLY JSON:
               "fresh_copy_needed": false, "patient_reason": "..."}}]}}"""
 
 
+log = logging.getLogger("llm")
+
+
 def _codes_block():
     return "\n".join(f"  {k}: {v['label']} (held by {v['source']})" for k, v in DOC_TYPES.items())
 
 
 def engine_name() -> str:
     forced = os.getenv("LLM_ENGINE", "").strip().lower()
-    if forced:
-        return forced
-    for env, name in (("GEMINI_API_KEY", "gemini"), ("ANTHROPIC_API_KEY", "anthropic"),
-                      ("OPENAI_API_KEY", "openai")):
-        if os.getenv(env):
-            return name
-    return "rules"
+    if forced == "rules":
+        return "rules"
+    chain = engine_chain()
+    return chain[0] if chain else "rules"
+
+
+KEY_ENVS = (("GEMINI_API_KEY", "gemini"), ("XAI_API_KEY", "xai"), ("ANTHROPIC_API_KEY", "anthropic"),
+            ("OPENAI_API_KEY", "openai"))
+
+
+def engine_chain() -> list[str]:
+    """Every AI engine that has a key, forced one first. Tried in order before the rules reader."""
+    forced = os.getenv("LLM_ENGINE", "").strip().lower()
+    names = [n for env, n in KEY_ENVS if os.getenv(env)]
+    if forced and forced != "rules":
+        names = [forced] + [n for n in names if n != forced]
+    return names
 
 
 def _parse_json(s: str) -> dict:
@@ -111,34 +126,64 @@ def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text f
     body = {"system_instruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": 0, "response_mime_type": "application/json"}}
-    models = [m for m in [os.getenv("GEMINI_MODEL")] + GEMINI_MODELS if m]
-    last = ""
     import time
+    key = os.environ["GEMINI_API_KEY"]
     deadline = time.time() + 45                    # never keep the patient waiting more than ~45 s
-    for model in dict.fromkeys(models):           # try each model once, in order
+    errors: list[str] = []
+
+    def try_model(model):
         for attempt in range(2):
             if time.time() > deadline:
-                raise RuntimeError(last or "Gemini took too long")
+                errors.append("out of time")
+                return None, 0
             try:
                 r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                           headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, json=body, timeout=20)
+                               headers={"x-goog-api-key": key}, json=body, timeout=20)
             except httpx.TimeoutException:
-                last = f"Gemini timed out on {model}"
-                break
+                errors.append(f"{model}: timed out")
+                return None, 0
             if r.status_code == 200:
-                return _parse_json(r.json()["candidates"][0]["content"]["parts"][0]["text"])
+                try:
+                    return _parse_json(r.json()["candidates"][0]["content"]["parts"][0]["text"]), 200
+                except Exception as e:
+                    errors.append(f"{model}: unreadable reply ({type(e).__name__})")
+                    return None, 200
             try:
-                msg = r.json().get("error", {}).get("message", "")[:160]
+                msg = r.json().get("error", {}).get("message", "")[:90]
             except Exception:
-                msg = r.text[:160]
-            last = f"Gemini {r.status_code} on {model}: {msg}"
+                msg = r.text[:90]
+            errors.append(f"{model}: {r.status_code} {msg}")
             if r.status_code in (429, 500, 503) and attempt == 0:
                 time.sleep(2)
                 continue
-            break
-        if "timed out" not in last and r.status_code in (400, 401, 403):  # key problem: other models won't help
-            break
-    raise RuntimeError(last)
+            return None, r.status_code
+        return None, 0
+
+    tried = []
+    for model in dict.fromkeys(m for m in [os.getenv("GEMINI_MODEL")] + GEMINI_MODELS if m):
+        tried.append(model)
+        out, code = try_model(model)
+        if out:
+            return out
+        if code in (400, 401, 403):                # key problem: other models won't help
+            raise RuntimeError("Gemini " + "; ".join(errors)[:300])
+
+    # every named model failed: ask Google which models this key can actually use
+    try:
+        r = httpx.get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+                      headers={"x-goog-api-key": key}, timeout=10)
+        names = [m["name"].split("/", 1)[1] for m in r.json().get("models", [])
+                 if "generateContent" in m.get("supportedGenerationMethods", [])]
+    except Exception:
+        names = []
+    cands = [n for n in names if "flash" in n and not any(x in n for x in ("image", "tts", "live", "audio", "thinking", "robotics", "embedding"))]
+    cands.sort(key=lambda n: ("lite" in n, "preview" in n or "exp" in n, [-int(x) for x in re.findall(r"\d+", n)[:2]]))
+    for model in [c for c in cands if c not in tried][:3]:
+        out, code = try_model(model)
+        if out:
+            log.warning("Gemini: %s worked; set GEMINI_MODEL=%s", model, model)
+            return out
+    raise RuntimeError("Gemini " + "; ".join(errors)[:300] + (f" | key can use: {', '.join(cands[:5])}" if cands else ""))
 
 
 def _anthropic(text, file_bytes, filename, system=None, prefix="Query letter text follows (may be empty if scanned):\n\n"):
@@ -171,6 +216,39 @@ def _openai(text, file_bytes, filename, system=None, prefix="Query letter text f
                                       {"role": "user", "content": prefix + (text or "")}]})
     r.raise_for_status()
     return _parse_json(r.json()["choices"][0]["message"]["content"])
+
+
+def _xai(text, file_bytes, filename, system=None, prefix="Query letter text follows (may be empty if scanned):\n\n"):
+    """Grok via xAI's OpenAI-compatible API. Text only: scanned letters need Gemini/Claude/OpenAI."""
+    system = system or SYSTEM.format(codes=_codes_block())
+    key = os.environ["XAI_API_KEY"]
+    hdr = {"Authorization": f"Bearer {key}"}
+    msgs = [{"role": "system", "content": system}, {"role": "user", "content": prefix + (text or "")}]
+    errors, tried = [], []
+
+    def go(model):
+        tried.append(model)
+        r = httpx.post("https://api.x.ai/v1/chat/completions", headers=hdr, timeout=30,
+                       json={"model": model, "temperature": 0, "messages": msgs})
+        if r.status_code == 200:
+            return _parse_json(r.json()["choices"][0]["message"]["content"])
+        errors.append(f"{model}: {r.status_code} {r.text[:90]}")
+        return None
+
+    first = os.getenv("XAI_MODEL", "grok-4-fast-non-reasoning")
+    out = go(first)
+    if out:
+        return out
+    try:                                            # ask xAI which models this key can use
+        ids = [m["id"] for m in httpx.get("https://api.x.ai/v1/models", headers=hdr, timeout=10).json().get("data", [])]
+    except Exception:
+        ids = []
+    for mid in [i for i in ids if i.startswith("grok") and not any(x in i for x in ("image", "vision", "imagine", "video"))
+                and i not in tried][:3]:
+        out = go(mid)
+        if out:
+            return out
+    raise RuntimeError("Grok " + "; ".join(errors)[:300])
 
 
 # ---- no-key fallback -----------------------------------------------------------
@@ -245,18 +323,21 @@ def _rules(text, *_):
     return {"summary": f"{len(points)} point(s) raised", "deadline": m.group(1) if m else "", "points": points}
 
 
-ENGINES = {"gemini": _gemini, "anthropic": _anthropic, "openai": _openai, "rules": _rules}
+ENGINES = {"gemini": _gemini, "xai": _xai, "anthropic": _anthropic, "openai": _openai, "rules": _rules}
 
 
 def extract_points(text: str, file_bytes: bytes = b"", filename: str = "") -> tuple[dict, str]:
-    """Returns (result, engine_used). Falls back to rules if the LLM call fails."""
-    name = engine_name()
-    try:
-        out = ENGINES[name](text, file_bytes, filename)
-    except Exception as e:  # never block the pipeline on an API hiccup
-        if name == "rules":
-            raise
-        out, name = _rules(text), f"rules (fallback: {str(e)[:200] or type(e).__name__})"
+    """Returns (result, engine_used). Tries every configured AI in turn, then the rules reader."""
+    out, name, errs = None, "rules", []
+    for eng in engine_chain():
+        try:
+            out, name = ENGINES[eng](text, file_bytes, filename), eng
+            break
+        except Exception as e:  # never block the pipeline on an API hiccup
+            errs.append(f"{eng}: {str(e)[:160] or type(e).__name__}")
+    if out is None:
+        out = _rules(text)
+        name = f"rules (fallback: {' | '.join(errs)[:300]})" if errs else "rules"
     # sanitise: keep only known codes, fill missing reasons
     for p in out.get("points", []):
         p["doc_types"] = [c for c in p.get("doc_types", []) if c in DOC_TYPES]
@@ -268,11 +349,11 @@ def extract_points(text: str, file_bytes: bytes = b"", filename: str = "") -> tu
 
 
 def call_llm(system: str, text: str, file_bytes: bytes, filename: str, prefix: str) -> tuple[dict | None, str]:
-    """Generic JSON call on whichever engine is configured. Returns (None, 'rules') with no key."""
-    name = engine_name()
-    if name == "rules":
-        return None, "rules"
-    try:
-        return ENGINES[name](text, file_bytes, filename, system=system, prefix=prefix), name
-    except Exception as e:
-        return None, f"rules (fallback: {str(e)[:200] or type(e).__name__})"
+    """Generic JSON call on the first configured engine that works. Returns (None, 'rules') with no key."""
+    errs = []
+    for eng in engine_chain():
+        try:
+            return ENGINES[eng](text, file_bytes, filename, system=system, prefix=prefix), eng
+        except Exception as e:
+            errs.append(f"{eng}: {str(e)[:160] or type(e).__name__}")
+    return None, (f"rules (fallback: {' | '.join(errs)[:300]})" if errs else "rules")
