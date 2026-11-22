@@ -207,4 +207,46 @@ with TestClient(main.app, follow_redirects=False) as c:
 links.LINK_DAYS = old
 os.environ.pop("PUBLIC_BASE_URL", None)
 
+# ---- "what's new" notices, and no message when nothing is missing ------------------------
+print("Notices and no-spam")
+db.ex("DELETE FROM documents WHERE patient_id='CF-P004' AND doc_type IN ('consultation_papers','past_medical_records')")
+LETTER = b"Niva Bupa query\n1. First consultation paper / prescription prior to admission.\n2. Past treatment records for the last 2 years.\nKindly submit within 7 days."
+
+
+def out_count(qid):
+    return len(db.q("SELECT * FROM messages WHERE query_id=? AND direction='out'", (qid,)))
+
+
+with TestClient(main.app) as agent, TestClient(main.app) as pat:
+    tk = login(agent, "agent.priya", "Agent@2026")
+    pt = login(pat, "p004", "Patient@2026")
+    agent.post("/patients/CF-P004/queries", data={"csrf": tk}, files={"file": ("letter.txt", LETTER, "text/plain")})
+    q1 = db.q1("SELECT max(id) m FROM queries")["m"]
+    check(wait_query(q1) == "sent" and out_count(q1) == 2, "missing items -> message sent")
+
+    pat.post("/patients/CF-P004/documents", data={"csrf": pt}, files={"files": ("rx.pdf", make_pdf("Consultation paper - prescription from Dr. Rao"), "application/pdf")})
+    page_a = agent.get("/patients/CF-P004").text
+    check("New since you last looked" in page_a and "uploaded Consultation papers" in page_a and "Still pending" in page_a,
+          "agent sees 'patient uploaded X, still pending Y'")
+    check("New since you last looked" not in pat.get("/patients/CF-P004").text, "patient does not see staff notices")
+    check("new update" in agent.get("/").text, "dashboard flags the patient with a new update")
+
+    pat.post("/patients/CF-P004/documents", data={"csrf": pt}, files={"files": ("old.pdf", make_pdf("Past medical records - previous treatment history"), "application/pdf")})
+    check(db.q1("SELECT status FROM queries WHERE id=?", (q1,))["status"] == "complete", "query completes when the last item arrives")
+    check("has now arrived" in agent.get("/patients/CF-P004").text, "agent told everything asked for has arrived")
+    agent.post("/patients/CF-P004/notifications/seen", data={"csrf": tk})
+    check("New since you last looked" not in agent.get("/patients/CF-P004").text, "'Got it' clears the notices")
+
+    sent_before = db.q1("SELECT count(*) n FROM messages WHERE direction='out'")["n"]
+    agent.post("/patients/CF-P004/queries", data={"csrf": tk}, files={"file": ("letter2.txt", LETTER, "text/plain")})
+    q2 = db.q1("SELECT max(id) m FROM queries")["m"]
+    check(wait_query(q2) == "no_patient_action", "same letter again, all documents present -> no patient action")
+    check(db.q1("SELECT count(*) n FROM messages WHERE direction='out'")["n"] == sent_before, "no message sent when nothing is missing")
+    check("already in" in agent.get("/patients/CF-P004").text and "No message was sent" in agent.get("/patients/CF-P004").text,
+          "agent told everything is already in the locker")
+
+    agent.post(f"/queries/{q1}/reprocess", data={"csrf": tk})
+    check(wait_query(q1) == "complete", "re-reading an answered letter marks it complete")
+    check(db.q1("SELECT count(*) n FROM messages WHERE direction='out'")["n"] == sent_before, "re-reading does not re-send")
+
 print(f"\nAll {ok} checks passed.")

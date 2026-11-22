@@ -250,6 +250,8 @@ def dashboard(request: Request, view: str = "all", q: str = ""):
     ph = ",".join("?" * len(ids))
     docs = {r["patient_id"]: r["n"] for r in db.q(f"SELECT patient_id, COUNT(*) n FROM documents WHERE patient_id IN ({ph}) GROUP BY patient_id", ids)}
     flagged = {r["patient_id"]: r["n"] for r in db.q(f"SELECT patient_id, COUNT(*) n FROM documents WHERE flag IS NOT NULL AND patient_id IN ({ph}) GROUP BY patient_id", ids)}
+    updates = {r["patient_id"]: r["n"] for r in db.q(
+        f"SELECT patient_id, COUNT(*) n FROM notifications WHERE seen_at IS NULL AND patient_id IN ({ph}) GROUP BY patient_id", ids)}
     queries = db.q(f"SELECT * FROM queries WHERE patient_id IN ({ph}) ORDER BY id", ids)
     latest, pending = {}, {}
     for r in queries:
@@ -276,7 +278,7 @@ def dashboard(request: Request, view: str = "all", q: str = ""):
         if q and q.lower() not in hay:
             continue
         rows.append({**p, "lq": lq, "docs": docs.get(p["id"], 0), "flagged": flagged.get(p["id"], 0),
-                     "pending": pending.get(p["id"], 0), "needs": needs})
+                     "pending": pending.get(p["id"], 0), "needs": needs, "updates": updates.get(p["id"], 0)})
     recent = db.q(f"""SELECT q.*, p.name FROM queries q JOIN patients p ON p.id=q.patient_id
                       WHERE q.patient_id IN ({ph}) ORDER BY q.id DESC LIMIT 8""", ids)
     for r in recent:
@@ -365,9 +367,22 @@ def patient_page(request: Request, pid: str):
     checklist = [(c, DOC_TYPES[c]["label"], c in have) for c in
                  ("kyc_aadhaar", "kyc_pan", "policy_copy", "health_card", "discharge_summary", "final_bill",
                   "investigation_reports", "consultation_papers", "pharmacy_bills", "cancelled_cheque")]
+    notes = db.q("SELECT * FROM notifications WHERE patient_id=? AND seen_at IS NULL ORDER BY id DESC", (pid,)) \
+        if user["role"] in ("admin", "agent") else []
     return page(request, "patient.html", {
-        "p": p, "docs": docs, "queries": queries, "msgs": msgs, "checklist": checklist, "open_items": open_items,
+        "notes": notes, "p": p, "docs": docs, "queries": queries, "msgs": msgs, "checklist": checklist, "open_items": open_items,
         "doc_types": sorted(DOC_TYPES.items(), key=lambda kv: kv[1]["label"])})
+
+
+@app.post("/patients/{pid}/notifications/seen")
+def notifications_seen(request: Request, pid: str, csrf: str = Form("")):
+    user = require_user(request)
+    guard(user, pid)
+    if user["role"] == "patient":
+        raise HTTPException(403)
+    check_csrf(request, csrf)
+    db.ex("UPDATE notifications SET seen_at=? WHERE patient_id=? AND seen_at IS NULL", (db.now(), pid))
+    return RedirectResponse(f"/patients/{pid}", 303)
 
 
 # ---- documents ---------------------------------------------------------------------

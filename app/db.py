@@ -90,6 +90,14 @@ CREATE TABLE IF NOT EXISTS messages (
     error TEXT,
     created_at TEXT
 );
+CREATE TABLE IF NOT EXISTS notifications (   -- "what's new" notes shown to staff on the patient's page
+    id INTEGER PRIMARY KEY,
+    patient_id TEXT NOT NULL,
+    kind TEXT,                   -- upload | complete | all_present
+    text TEXT,
+    created_at TEXT,
+    seen_at TEXT
+);
 CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY,
     at TEXT, username TEXT, action TEXT, target TEXT

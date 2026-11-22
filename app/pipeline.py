@@ -39,6 +39,16 @@ def read_text(path: str) -> str:
 
 
 # ---- documents ----------------------------------------------------------------
+def tell_staff(patient_id: str, kind: str, text: str):
+    db.ex("INSERT INTO notifications(patient_id, kind, text, created_at) VALUES (?,?,?,?)",
+          (patient_id, kind, text, db.now()))
+
+
+def _by_patient(by: str) -> bool:
+    return by.lower().startswith("patient") or bool(
+        db.q1("SELECT 1 FROM users WHERE username=? AND role='patient'", (by,)))
+
+
 def add_document(patient_id: str, filename: str, data: bytes, by: str, source: str = "portal",
                  doc_type: str | None = None, notes: str | None = None) -> dict:
     """Save a file into the locker, classify it from its contents, update query progress."""
@@ -62,7 +72,14 @@ def add_document(patient_id: str, filename: str, data: bytes, by: str, source: s
                 (patient_id, res["doc_type"], filename, str(path), db.now(), by, notes,
                  res["confidence"], res["classified_by"], res["flag"], source, digest))
     db.audit(by, "UPLOAD_DOC", f"{patient_id}:{res['doc_type']}")
-    refresh_progress(patient_id)
+    done = refresh_progress(patient_id)
+    if _by_patient(by):
+        first = patient["name"].split()[0]
+        still = [DOC_TYPES[c]["label"] for _, pend in all_pending(patient_id) for c in pend]
+        txt = f"{first} uploaded {DOC_TYPES[res['doc_type']]['label']}."
+        if still:
+            txt += " Still pending: " + ", ".join(dict.fromkeys(still)) + "."
+        tell_staff(patient_id, "upload", txt)
     return {"id": did, "duplicate": False, **res}
 
 
@@ -261,8 +278,14 @@ def notify_for_query(query_id: int, force: bool = False):
     subject, body, n = compose(patient, points, due.strftime("%d %b %Y"))
     needs_review = any(p["decision"] == "needs_review" for p in points)
     if n == 0:
-        db.ex("UPDATE queries SET status=? WHERE id=?",
-              ("needs_review" if needs_review else "no_patient_action", query_id))
+        asked_before = db.q1("SELECT 1 FROM messages WHERE query_id=? AND direction='out'", (query_id,))
+        status = "needs_review" if needs_review else ("complete" if asked_before else "no_patient_action")
+        db.ex("UPDATE queries SET status=? WHERE id=?", (status, query_id))
+        if not needs_review:
+            first = patient["name"].split()[0]
+            tell_staff(patient["id"], "all_present",
+                       f"{qrow['filename']}: everything this letter asks for is already in {first}'s locker. "
+                       f"No message was sent to the patient.")
         return
     statuses = send_to_patient(patient, query_id, subject, body, "query")
     if statuses and all(s == "failed" for s in statuses):
@@ -286,14 +309,21 @@ def pending_for_query(qrow: dict) -> tuple[list[str], list[str]]:
     return [c for c in asked if c in got], [c for c in asked if c not in got]
 
 
-def refresh_progress(patient_id: str):
+def refresh_progress(patient_id: str) -> list[dict]:
+    """Tick off what has arrived. Returns the queries that just became complete."""
+    finished = []
     for qrow in db.q(f"SELECT * FROM queries WHERE patient_id=? AND status IN ({','.join('?' * len(OPEN_STATUSES))})",
                      (patient_id, *OPEN_STATUSES)):
         received, pending = pending_for_query(qrow)
         if received and not pending:
             db.ex("UPDATE queries SET status='complete', completed_at=? WHERE id=?", (db.now(), qrow["id"]))
+            finished.append(qrow)
+            name = (db.q1("SELECT name FROM patients WHERE id=?", (patient_id,)) or {"name": "the patient"})["name"].split()[0]
+            tell_staff(patient_id, "complete",
+                       f"Everything asked for in {qrow['filename']} has now arrived. Nothing more is needed from {name}.")
         elif received:
             db.ex("UPDATE queries SET status='partially_received' WHERE id=?", (qrow["id"],))
+    return finished
 
 
 def all_pending(patient_id: str) -> list[tuple[dict, list[str]]]:

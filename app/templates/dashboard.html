@@ -39,7 +39,7 @@
       <tr><th>Patient</th><th>Insurer · claim</th><th>Docs</th><th>Status</th></tr>
       {% for p in rows %}
       <tr>
-        <td><a href="/patients/{{ p.id }}"><b>{{ p.name }}</b></a><div class="mono muted">{{ p.id }}</div></td>
+        <td><a href="/patients/{{ p.id }}"><b>{{ p.name }}</b></a>{% if p.updates %} <span class="chip c-info">{{ p.updates }} new update{{ '' if p.updates == 1 else 's' }}</span>{% endif %}<div class="mono muted">{{ p.id }}</div></td>
         <td>{{ p.insurer or '—' }}<div class="mono muted">{{ p.claim_no or '' }}</div></td>
         <td>{{ p.docs }}{% if p.flagged %}<div class="flag">{{ p.flagged }} to check</div>{% endif %}</td>
         <td>{% if p.lq %}{{ status_chip(p.lq.status) }}{% if p.pending %}<div class="small muted">{{ p.pending }} item{{ '' if p.pending == 1 else 's' }} pending</div>{% endif %}

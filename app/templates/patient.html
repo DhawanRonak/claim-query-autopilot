@@ -5,6 +5,19 @@
 {% set staff = user.role in ('admin','agent') %}
 {% set full_contact = user.role in ('admin','patient') %}
 {% if staff %}<a class="small" href="/">← All patients</a>{% endif %}
+{% if notes %}
+<div class="panel" style="background:var(--info-soft);border-color:#c9d9f3">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <h3 style="margin:0">New since you last looked</h3>
+    <form method="post" action="/patients/{{ p.id }}/notifications/seen" style="margin:0">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">Got it</button>
+    </form>
+  </div>
+  <ul style="margin:8px 0 0;padding-left:18px;line-height:1.7">
+    {% for n in notes %}<li>{% if n.kind in ('complete','all_present') %}<b style="color:var(--ok)">✓</b> {% endif %}{{ n.text }} <span class="small muted">{{ n.created_at[:16].replace('T',' ') }} UTC</span></li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
 <div style="display:flex;justify-content:space-between;align-items:end;flex-wrap:wrap;gap:12px;margin:6px 0 16px">
   <div><h1>{{ p.name }}</h1><div class="mono muted">{{ p.id }} · Claim {{ p.claim_no or '—' }}</div></div>
   {% if staff %}
