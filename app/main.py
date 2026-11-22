@@ -21,6 +21,7 @@ from . import db  # noqa: E402
 from .importer import import_bundle  # noqa: E402
 from .inbound import handle_meta, handle_whatsapp  # noqa: E402
 from .llm import engine_name  # noqa: E402
+from .links import SECRET, read_token  # noqa: E402
 from .notify import email_configured, email_provider, meta_signature_ok, send_email, send_whatsapp, twilio_signature_ok, whatsapp_provider  # noqa: E402
 from .pipeline import (OPEN_STATUSES, add_document, notify_for_query, pending_for_query, point_rows,  # noqa: E402
                        process_query, refresh_progress, run_due_reminders, send_reminder)
@@ -28,7 +29,7 @@ from .taxonomy import DOC_TYPES, PATIENT_SOURCED, label  # noqa: E402
 
 db.init()
 app = FastAPI(title="care.fi Patient Locker")
-app.add_middleware(SessionMiddleware, secret_key=(os.getenv("SECRET_KEY") if os.getenv("SECRET_KEY") not in (None, "", "change-me-to-a-long-random-string") else secrets.token_hex(32)),
+app.add_middleware(SessionMiddleware, secret_key=SECRET,
                    https_only=os.getenv("HTTPS_ONLY") == "1", same_site="lax", max_age=8 * 3600)
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -200,6 +201,21 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
     request.session["csrf"] = secrets.token_urlsafe(24)
     db.audit(u["username"], "LOGIN")
     return RedirectResponse("/", 303)
+
+
+@app.get("/open/{token}")
+def open_link(request: Request, token: str):
+    """Personal link from a WhatsApp/email message: signs the patient straight into their own locker."""
+    pid = read_token(token)
+    u = db.q1("SELECT * FROM users WHERE role='patient' AND patient_id=?", (pid,)) if pid else None
+    if not u:
+        return page(request, "login.html", {"user": None,
+                    "err": "This link has expired or isn't valid. Please sign in, or ask us to send a new one."}, 401)
+    request.session.clear()
+    request.session["uid"] = u["id"]
+    request.session["csrf"] = secrets.token_urlsafe(24)
+    db.audit(u["username"], "LOGIN_BY_LINK")
+    return RedirectResponse(f"/patients/{pid}", 303)
 
 
 @app.get("/logout")

@@ -3,6 +3,7 @@
 Runs automatically the moment a query letter lands in a patient's locker, and
 keeps each query's progress up to date as the patient sends documents back.
 """
+from .links import make_token
 import json
 import os
 import re
@@ -163,7 +164,8 @@ def _fields(patient, asks, already, deadline_str):
         "already_have": already, "deadline": deadline_str,
         "support_phone": os.getenv("SUPPORT_PHONE", "+91-80-0000-0000"),
         "brand": os.getenv("BRAND_NAME", "care.fi"),
-        "portal_url": (os.getenv("PUBLIC_BASE_URL") or "the patient portal").rstrip("/"),
+        "portal_url": (f"{os.getenv('PUBLIC_BASE_URL').rstrip('/')}/open/{make_token(patient['id'])}"
+                       if os.getenv("PUBLIC_BASE_URL") else "the patient portal"),
         "patient_login": re.sub(r"[^a-z0-9]", "", patient["id"].lower()),
     }
 

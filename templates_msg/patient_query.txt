@@ -11,8 +11,9 @@ Please send us the following ({item_count}):
 {items}
 
 {already_have}
-Please share them by {deadline}. Upload clear photos or PDFs in your Patient Locker: {portal_url}
-(Login: {patient_login}). You can also send them on WhatsApp.
+Please share them by {deadline}. Upload clear photos or PDFs in your Patient Locker using this personal link (no password needed, please don't share it):
+{portal_url}
+You can also send them on WhatsApp.
 
 If you have any questions, call us at {support_phone}.
 

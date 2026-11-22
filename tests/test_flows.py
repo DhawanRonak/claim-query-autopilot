@@ -183,4 +183,27 @@ with TestClient(main.app) as c:
     c.post("/webhooks/meta", content=raw, headers={"x-hub-signature-256": "sha256=" + hmac.new(b"sec", raw, hashlib.sha256).hexdigest()})
     check(db.q1("SELECT status FROM messages WHERE provider_ref='wamid.OUT1'")["status"] == "read", "read receipt recorded")
 
+# ---- personal sign-in link ---------------------------------------------------------
+os.environ["PUBLIC_BASE_URL"] = "https://example.test"
+from app import links, pipeline  # noqa: E402
+msg_pt = db.q1("SELECT * FROM patients WHERE id='CF-P002'")
+f = pipeline._fields(dict(msg_pt), ["x"], "", "1 Jan 2027")
+check(f["portal_url"].startswith("https://example.test/open/"), "message carries a personal link")
+check("Patient@2026" not in open("templates_msg/patient_query.txt").read(), "template never contains a password")
+tok = f["portal_url"].rsplit("/", 1)[1]
+with TestClient(main.app, follow_redirects=False) as c:
+    r = c.get(f"/open/{tok}")
+    check(r.status_code == 303 and r.headers["location"] == "/patients/CF-P002", "personal link signs the patient into their own locker")
+    check(c.get("/patients/CF-P002").status_code == 200, "link session can open that patient")
+    check(c.get("/patients/CF-P003").status_code in (403, 404), "link session cannot open another patient")
+with TestClient(main.app, follow_redirects=False) as c:
+    check(c.get(f"/open/{tok}x").status_code == 401, "tampered link rejected")
+    check(c.get("/open/not-a-token").status_code == 401, "garbage link rejected")
+old = links.LINK_DAYS
+links.LINK_DAYS = -1
+with TestClient(main.app, follow_redirects=False) as c:
+    check(c.get(f"/open/{tok}").status_code == 401, "expired link rejected")
+links.LINK_DAYS = old
+os.environ.pop("PUBLIC_BASE_URL", None)
+
 print(f"\nAll {ok} checks passed.")
