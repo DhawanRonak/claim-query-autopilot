@@ -7,6 +7,8 @@ A quick reminder: we are still waiting for {item_count} item(s) for your claim w
 
 Please share them by {deadline} so your claim isn't delayed. Upload clear photos or PDFs in your Patient Locker using this personal link (no password needed, please don't share it):
 {portal_url}
+To sign in yourself later: {login_url}
+Username: {patient_login}   Password: {patient_password}
 You can also send them on WhatsApp.
 
 Questions? Call us at {support_phone}.

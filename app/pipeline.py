@@ -155,6 +155,11 @@ def ask_lines(points: list[dict], only_codes: set | None = None) -> list[str]:
     return asks
 
 
+def _login_name(patient) -> str:
+    u = db.q1("SELECT username FROM users WHERE role='patient' AND patient_id=?", (patient["id"],))
+    return u["username"] if u else re.sub(r"[^a-z0-9]", "", patient["id"].lower())
+
+
 def _fields(patient, asks, already, deadline_str):
     return {
         "patient_first_name": patient["name"].split()[0], "patient_name": patient["name"],
@@ -166,7 +171,10 @@ def _fields(patient, asks, already, deadline_str):
         "brand": os.getenv("BRAND_NAME", "care.fi"),
         "portal_url": (f"{os.getenv('PUBLIC_BASE_URL').rstrip('/')}/open/{make_token(patient['id'])}"
                        if os.getenv("PUBLIC_BASE_URL") else "the patient portal"),
-        "patient_login": re.sub(r"[^a-z0-9]", "", patient["id"].lower()),
+        "patient_login": _login_name(patient),
+        # Demo-grade: one shared starter password. A production build would issue a one-time code per patient.
+        "patient_password": os.getenv("PATIENT_DEFAULT_PASSWORD", "Patient@2026"),
+        "login_url": (os.getenv("PUBLIC_BASE_URL", "").rstrip("/") + "/login") if os.getenv("PUBLIC_BASE_URL") else "the patient portal",
     }
 
 

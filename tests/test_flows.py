@@ -189,7 +189,8 @@ from app import links, pipeline  # noqa: E402
 msg_pt = db.q1("SELECT * FROM patients WHERE id='CF-P002'")
 f = pipeline._fields(dict(msg_pt), ["x"], "", "1 Jan 2027")
 check(f["portal_url"].startswith("https://example.test/open/"), "message carries a personal link")
-check("Patient@2026" not in open("templates_msg/patient_query.txt").read(), "template never contains a password")
+check("Patient@2026" not in open("templates_msg/patient_query.txt").read(), "template never hard-codes a password")
+check(f["patient_login"] == "p002" and f["patient_password"] and f["login_url"] == "https://example.test/login", "username, password and login page available to the message")
 tok = f["portal_url"].rsplit("/", 1)[1]
 with TestClient(main.app, follow_redirects=False) as c:
     r = c.get(f"/open/{tok}")

@@ -21,6 +21,13 @@
       <input name="email" placeholder="email">
       <button class="btn">Send test</button>
     </form>
+    <h3 style="margin-top:16px">Test the AI reader</h3>
+    <p class="small muted">Asks each Gemini model your key can use for a tiny reply and shows which work and how fast. Takes up to 25 seconds.</p>
+    <form method="post" action="/settings/test-ai" class="inline">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn ghost">Test AI reader</button>
+    </form>
+    {% if ai_report %}<pre class="msg mono">{{ ai_report | join("\n") }}</pre>{% endif %}
   </div>
   <div class="panel">
     <h2>WhatsApp replies (Meta Cloud API)</h2>

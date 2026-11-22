@@ -114,7 +114,7 @@ def _mime(filename: str) -> str:
 
 
 # ---- engines -----------------------------------------------------------------
-GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
 
 
 def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text follows (may be empty if scanned):\n\n"):
@@ -155,40 +155,83 @@ def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text f
         errors.append(f"{model}: {r.status_code} {msg}")
         return None, r.status_code
 
-    # Ask several models at once and take the first good answer: one overloaded (503) model can't stall a letter.
-    tried = list(dict.fromkeys(m for m in [os.getenv("GEMINI_MODEL")] + GEMINI_MODELS if m))
-    ex = ThreadPoolExecutor(max_workers=len(tried))
-    futs = [ex.submit(try_model, m) for m in tried]
+    # Ask several models at once and take the first good answer: one overloaded or retired model can't stall a letter.
+    cands = _gemini_candidates(key)
+    ex = ThreadPoolExecutor(max_workers=len(cands))
+    futs = [ex.submit(try_model, m) for m in cands]
     codes = []
     try:
-        for f in as_completed(futs, timeout=40):
+        for f in as_completed(futs, timeout=30):
             out, code = f.result()
             codes.append(code)
             if out:
                 return out
     except Exception:
-        errors.append("no model answered in time")
+        errors.append("no answer in 30s")
     finally:
         ex.shutdown(wait=False, cancel_futures=True)
-    if codes and all(c in (400, 401, 403) for c in codes):   # key problem: discovery won't help
-        raise RuntimeError("Gemini " + "; ".join(errors)[:300])
+    raise RuntimeError("Gemini " + "; ".join(e[:75] for e in errors)[:300])
 
-    # every named model failed: ask Google which models this key can actually use
+
+_CAND_CACHE: dict = {"t": 0.0, "models": []}
+
+
+def _gemini_models_for_key(key: str) -> list[str]:
+    """Flash models this key can actually call, newest first (cached 10 min)."""
+    import time
+    if time.time() - _CAND_CACHE["t"] < 600 and _CAND_CACHE["models"]:
+        return _CAND_CACHE["models"]
     try:
         r = httpx.get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
-                      headers={"x-goog-api-key": key}, timeout=10)
+                      headers={"x-goog-api-key": key}, timeout=8)
         names = [m["name"].split("/", 1)[1] for m in r.json().get("models", [])
                  if "generateContent" in m.get("supportedGenerationMethods", [])]
     except Exception:
-        names = []
-    cands = [n for n in names if "flash" in n and not any(x in n for x in ("image", "tts", "live", "audio", "thinking", "robotics", "embedding"))]
-    cands.sort(key=lambda n: ("lite" in n, "preview" in n or "exp" in n, [-int(x) for x in re.findall(r"\d+", n)[:2]]))
-    for model in [c for c in cands if c not in tried][:3]:
-        out, code = try_model(model)
-        if out:
-            log.warning("Gemini: %s worked; set GEMINI_MODEL=%s", model, model)
-            return out
-    raise RuntimeError("Gemini " + "; ".join(errors)[:300] + (f" | key can use: {', '.join(cands[:5])}" if cands else ""))
+        return []
+    ok = [n for n in names if "flash" in n and not any(x in n for x in ("image", "tts", "live", "audio", "thinking", "robotics", "embedding", "native"))]
+    ok.sort(key=lambda n: ("lite" in n, "preview" in n or "exp" in n, [-int(x) for x in re.findall(r"\d+", n)[:2]]))
+    _CAND_CACHE.update(t=time.time(), models=ok)
+    return ok
+
+
+def _gemini_candidates(key: str) -> list[str]:
+    found = _gemini_models_for_key(key)
+    order = [os.getenv("GEMINI_MODEL"), "gemini-flash-latest"] + found[:3] + GEMINI_MODELS
+    return list(dict.fromkeys(m for m in order if m))[:6]
+
+
+def gemini_diagnose() -> list[str]:
+    """For Settings -> Test AI reader: which models answer, and how fast."""
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        return ["No GEMINI_API_KEY set."]
+    cands = _gemini_candidates(key)
+    body = {"contents": [{"role": "user", "parts": [{"text": 'Reply with exactly this JSON: {"ok": true}'}]}],
+            "generationConfig": {"temperature": 0, "response_mime_type": "application/json"}}
+
+    def one(m):
+        t = time.time()
+        try:
+            r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
+                           headers={"x-goog-api-key": key}, json=body, timeout=25)
+            dt = f"{time.time() - t:.1f}s"
+            if r.status_code == 200:
+                return f"OK   {m}  {dt}"
+            try:
+                msg = r.json().get("error", {}).get("message", "")[:70]
+            except Exception:
+                msg = ""
+            return f"FAIL {m}  {r.status_code} {msg}"
+        except httpx.TimeoutException:
+            return f"FAIL {m}  no answer in 25s"
+        except Exception as e:
+            return f"FAIL {m}  {type(e).__name__}"
+
+    with ThreadPoolExecutor(max_workers=len(cands)) as ex:
+        res = list(ex.map(one, cands))
+    return res + [f"Models this key lists: {', '.join(_gemini_models_for_key(key)[:6]) or 'none found'}"]
 
 
 def _anthropic(text, file_bytes, filename, system=None, prefix="Query letter text follows (may be empty if scanned):\n\n"):

@@ -1,7 +1,7 @@
 # Patient message template. Lines starting with # are ignored.
 # Swap this file for care.fi's official template; keep the {placeholders}.
 # Available: {patient_first_name} {patient_name} {patient_id} {claim_no} {insurer}
-#            {hospital} {items} {item_count} {already_have} {deadline} {support_phone} {brand} {portal_url} {patient_login}
+#            {hospital} {items} {item_count} {already_have} {deadline} {support_phone} {brand} {portal_url} {patient_login} {patient_password} {login_url}
 SUBJECT: Action needed for your insurance claim {claim_no}
 Dear {patient_first_name},
 
@@ -13,6 +13,8 @@ Please send us the following ({item_count}):
 {already_have}
 Please share them by {deadline}. Upload clear photos or PDFs in your Patient Locker using this personal link (no password needed, please don't share it):
 {portal_url}
+To sign in yourself later: {login_url}
+Username: {patient_login}   Password: {patient_password}
 You can also send them on WhatsApp.
 
 If you have any questions, call us at {support_phone}.

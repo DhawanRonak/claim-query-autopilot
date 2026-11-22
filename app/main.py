@@ -535,6 +535,7 @@ def settings_page(request: Request):
     admin_only(user)
     base = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
     return page(request, "settings.html", {
+        "ai_report": request.session.pop("ai_report", None),
         "engine": engine_name(), "wa": whatsapp_provider(), "email_on": email_configured(), "email_prov": email_provider(),
         "wa_override": os.getenv("WHATSAPP_OVERRIDE_TO"), "email_override": os.getenv("EMAIL_OVERRIDE_TO"),
         "base": base, "webhook": f"{base or 'https://<your-public-url>'}/webhooks/twilio/whatsapp",
@@ -556,6 +557,16 @@ def settings_test(request: Request, phone: str = Form(""), email: str = Form("")
         st, _, err, to = send_email(email, "care.fi Patient Locker test", "Email is working.")
         out.append(f"Email to {to}: {st} {err}")
     flash(request, " | ".join(out) or "Enter a phone or email.")
+    return RedirectResponse("/settings", 303)
+
+
+@app.post("/settings/test-ai")
+def settings_test_ai(request: Request, csrf: str = Form("")):
+    user = require_user(request)
+    admin_only(user)
+    check_csrf(request, csrf)
+    from .llm import gemini_diagnose
+    request.session["ai_report"] = gemini_diagnose()
     return RedirectResponse("/settings", 303)
 
 
