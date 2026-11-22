@@ -114,7 +114,7 @@ def _mime(filename: str) -> str:
 
 
 # ---- engines -----------------------------------------------------------------
-GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
+GEMINI_MODELS = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
 
 
 def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text follows (may be empty if scanned):\n\n"):
@@ -127,46 +127,51 @@ def _gemini(text, file_bytes, filename, system=None, prefix="Query letter text f
             "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": 0, "response_mime_type": "application/json"}}
     import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     key = os.environ["GEMINI_API_KEY"]
-    deadline = time.time() + 45                    # never keep the patient waiting more than ~45 s
     errors: list[str] = []
 
     def try_model(model):
-        for attempt in range(2):
-            if time.time() > deadline:
-                errors.append("out of time")
-                return None, 0
+        """One model, one shot. (parsed_json or None, http_status)"""
+        try:
+            r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                           headers={"x-goog-api-key": key}, json=body, timeout=25)
+        except httpx.TimeoutException:
+            errors.append(f"{model}: timed out")
+            return None, 0
+        except Exception as e:
+            errors.append(f"{model}: {type(e).__name__}")
+            return None, 0
+        if r.status_code == 200:
             try:
-                r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                               headers={"x-goog-api-key": key}, json=body, timeout=20)
-            except httpx.TimeoutException:
-                errors.append(f"{model}: timed out")
-                return None, 0
-            if r.status_code == 200:
-                try:
-                    return _parse_json(r.json()["candidates"][0]["content"]["parts"][0]["text"]), 200
-                except Exception as e:
-                    errors.append(f"{model}: unreadable reply ({type(e).__name__})")
-                    return None, 200
-            try:
-                msg = r.json().get("error", {}).get("message", "")[:90]
-            except Exception:
-                msg = r.text[:90]
-            errors.append(f"{model}: {r.status_code} {msg}")
-            if r.status_code in (429, 500, 503) and attempt == 0:
-                time.sleep(2)
-                continue
-            return None, r.status_code
-        return None, 0
+                return _parse_json(r.json()["candidates"][0]["content"]["parts"][0]["text"]), 200
+            except Exception as e:
+                errors.append(f"{model}: unreadable reply ({type(e).__name__})")
+                return None, 200
+        try:
+            msg = r.json().get("error", {}).get("message", "")[:70]
+        except Exception:
+            msg = r.text[:70]
+        errors.append(f"{model}: {r.status_code} {msg}")
+        return None, r.status_code
 
-    tried = []
-    for model in dict.fromkeys(m for m in [os.getenv("GEMINI_MODEL")] + GEMINI_MODELS if m):
-        tried.append(model)
-        out, code = try_model(model)
-        if out:
-            return out
-        if code in (400, 401, 403):                # key problem: other models won't help
-            raise RuntimeError("Gemini " + "; ".join(errors)[:300])
+    # Ask several models at once and take the first good answer: one overloaded (503) model can't stall a letter.
+    tried = list(dict.fromkeys(m for m in [os.getenv("GEMINI_MODEL")] + GEMINI_MODELS if m))
+    ex = ThreadPoolExecutor(max_workers=len(tried))
+    futs = [ex.submit(try_model, m) for m in tried]
+    codes = []
+    try:
+        for f in as_completed(futs, timeout=40):
+            out, code = f.result()
+            codes.append(code)
+            if out:
+                return out
+    except Exception:
+        errors.append("no model answered in time")
+    finally:
+        ex.shutdown(wait=False, cancel_futures=True)
+    if codes and all(c in (400, 401, 403) for c in codes):   # key problem: discovery won't help
+        raise RuntimeError("Gemini " + "; ".join(errors)[:300])
 
     # every named model failed: ask Google which models this key can actually use
     try:
