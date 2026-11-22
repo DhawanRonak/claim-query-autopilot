@@ -196,8 +196,8 @@ def _gemini_models_for_key(key: str) -> list[str]:
 
 def _gemini_candidates(key: str) -> list[str]:
     found = _gemini_models_for_key(key)
-    order = [os.getenv("GEMINI_MODEL"), "gemini-flash-latest"] + found[:3] + GEMINI_MODELS
-    return list(dict.fromkeys(m for m in order if m))[:6]
+    order = [os.getenv("GEMINI_MODEL"), "gemini-flash-latest"] + found[:7] + GEMINI_MODELS
+    return list(dict.fromkeys(m for m in order if m))[:9]
 
 
 def gemini_diagnose() -> list[str]:
@@ -231,7 +231,7 @@ def gemini_diagnose() -> list[str]:
 
     with ThreadPoolExecutor(max_workers=len(cands)) as ex:
         res = list(ex.map(one, cands))
-    return res + [f"Models this key lists: {', '.join(_gemini_models_for_key(key)[:6]) or 'none found'}"]
+    return res + [f"Models this key lists: {', '.join(_gemini_models_for_key(key)[:9]) or 'none found'}"]
 
 
 def _anthropic(text, file_bytes, filename, system=None, prefix="Query letter text follows (may be empty if scanned):\n\n"):
