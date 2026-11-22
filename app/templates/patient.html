@@ -5,6 +5,11 @@
 {% set staff = user.role in ('admin','agent') %}
 {% set full_contact = user.role in ('admin','patient') %}
 {% if staff %}<a class="small" href="/">← All patients</a>{% endif %}
+{% if user.role == 'admin' %}
+<form method="post" action="/patients/{{ p.id }}/reset-demo" style="float:right;margin:0" onsubmit="return confirm('Remove this patient\'s letters, messages and uploads (starter documents are kept)?')">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost">Reset demo for this patient</button>
+</form>
+{% endif %}
 {% if notes %}
 <div class="panel" style="background:var(--info-soft);border-color:#c9d9f3">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">

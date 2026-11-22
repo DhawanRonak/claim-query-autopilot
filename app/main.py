@@ -374,6 +374,33 @@ def patient_page(request: Request, pid: str):
         "doc_types": sorted(DOC_TYPES.items(), key=lambda kv: kv[1]["label"])})
 
 
+@app.post("/patients/{pid}/reset-demo")
+def reset_demo(request: Request, pid: str, csrf: str = Form("")):
+    """Admin only: wipe this patient's letters, messages, notices and anything uploaded after the starter data,
+    so a demo can be run again from a clean state."""
+    user = require_user(request)
+    admin_only(user)
+    check_csrf(request, csrf)
+    if not db.q1("SELECT 1 FROM patients WHERE id=?", (pid,)):
+        raise HTTPException(404)
+    qids = [r["id"] for r in db.q("SELECT id FROM queries WHERE patient_id=?", (pid,))]
+    for qid in qids:
+        db.ex("DELETE FROM query_points WHERE query_id=?", (qid,))
+    db.ex("DELETE FROM messages WHERE patient_id=?", (pid,))
+    for r in db.q("SELECT stored_path FROM queries WHERE patient_id=?", (pid,)) + \
+            db.q("SELECT stored_path FROM documents WHERE patient_id=? AND uploaded_by!='seed'", (pid,)):
+        try:
+            Path(r["stored_path"]).unlink(missing_ok=True)
+        except Exception:
+            pass
+    db.ex("DELETE FROM queries WHERE patient_id=?", (pid,))
+    db.ex("DELETE FROM documents WHERE patient_id=? AND uploaded_by!='seed'", (pid,))
+    db.ex("DELETE FROM notifications WHERE patient_id=?", (pid,))
+    db.audit(user["username"], "RESET_DEMO", pid)
+    flash(request, "Demo reset: letters, messages and later uploads removed. Starter documents kept.")
+    return RedirectResponse(f"/patients/{pid}", 303)
+
+
 @app.post("/patients/{pid}/notifications/seen")
 def notifications_seen(request: Request, pid: str, csrf: str = Form("")):
     user = require_user(request)

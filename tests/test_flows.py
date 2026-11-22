@@ -249,4 +249,23 @@ with TestClient(main.app) as agent, TestClient(main.app) as pat:
     check(wait_query(q1) == "complete", "re-reading an answered letter marks it complete")
     check(db.q1("SELECT count(*) n FROM messages WHERE direction='out'")["n"] == sent_before, "re-reading does not re-send")
 
+print("Reset demo")
+with TestClient(main.app) as adm, TestClient(main.app) as ag:
+    ta = login(adm, "admin", "CareFi@2026")
+    tg = login(ag, "agent.priya", "Agent@2026")
+    pdf3 = (ROOT / "sample_queries" / "CF-P003_icici_query.pdf").read_bytes()
+    ag.post("/patients/CF-P003/queries", data={"csrf": tg}, files={"file": ("l.pdf", pdf3, "application/pdf")})
+    q3 = db.q1("SELECT max(id) m FROM queries")["m"]
+    check(wait_query(q3) == "sent", "P003 letter processed")
+    seeded = db.q1("SELECT count(*) n FROM documents WHERE patient_id='CF-P003' AND uploaded_by='seed'")["n"]
+    check(ag.post("/patients/CF-P003/reset-demo", data={"csrf": tg}).status_code == 403, "agent cannot reset a patient")
+    adm.post("/patients/CF-P003/reset-demo", data={"csrf": ta})
+    check(db.q1("SELECT count(*) n FROM queries WHERE patient_id='CF-P003'")["n"] == 0 and
+          db.q1("SELECT count(*) n FROM messages WHERE patient_id='CF-P003'")["n"] == 0, "reset clears letters and messages")
+    check(db.q1("SELECT count(*) n FROM documents WHERE patient_id='CF-P003' AND uploaded_by='seed'")["n"] == seeded and seeded > 0,
+          "reset keeps the starter documents")
+    ag.post("/patients/CF-P003/queries", data={"csrf": tg}, files={"file": ("l.pdf", pdf3, "application/pdf")})
+    q3 = db.q1("SELECT max(id) m FROM queries")["m"]
+    check(wait_query(q3) == "sent" and out_count(q3) == 2, "after reset the same letter works again")
+
 print(f"\nAll {ok} checks passed.")
